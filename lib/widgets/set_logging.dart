@@ -1,10 +1,10 @@
 import 'package:firstapp/other_utilities/decimal_input_formatter.dart';
+import 'package:firstapp/other_utilities/format_reps.dart';
 import 'package:firstapp/other_utilities/keyboard_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firstapp/providers_and_settings/program_provider.dart';
-import '../database/profile.dart';
 import '../providers_and_settings/settings_provider.dart';
 import 'package:firstapp/widgets/shake_widget.dart';
 import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
@@ -203,14 +203,14 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
 
     _validateInputs();
     if (_weightError || _repsError || _rpeError) {
-      debugPrint("Validation error on update for field $fieldName, not saving.");
+      //debugPrint("Validation error on update for field $fieldName, not saving.");
 
       // revert changes that cause an error. this is also paired with red and shake to indicate error.
       if (_weightError){
         widget.weightController.text = _initialWeightOnFocus;
       } else if (_repsError){
         widget.repsController.text = _initialRepsOnFocus;
-      } else if (_repsError){
+      } else if (_rpeError){
         widget.rpeController.text = _initialRpeOnFocus;
       }
 
@@ -223,7 +223,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     final double? rpe = double.tryParse(widget.rpeController.text);
 
     if (weight == null || reps == null || rpe == null) {
-      debugPrint("Error parsing values for update.");
+      //debugPrint("Error parsing values for update.");
       return;
     }
 
@@ -279,6 +279,8 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     final double screenWidth = MediaQuery.sizeOf(context).width;
     final bool smallScreen = screenWidth < 405;
     // displays horizontally fine for large screens, stacks vertically for smaller screens to prevent overflow
+    // Field widths + their horizontal padding (8 each side = 16 total per field)
+    // RPE: 35+16=51, Weight: 50+16=66, Reps: 40+16=56, Checkbox: 24+16=40
     if (!smallScreen){
       return ShakeWidget(
         shake: _moveItmoveIt,
@@ -289,90 +291,113 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
           ),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Row(
-              // alignment: WrapAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                  
-                  _buildTextFieldWithConfirmation(
-                    widget.rpeController, 
-                    rpeFocus, 
-                    "",
-                    35, 
-                    _rpeError, 
-                    "rpe"
-                  ),
-
-                  _buildTextFieldWithConfirmation(
-                    widget.weightController, 
-                    weightFocus, 
-                    "", 
-                    50, 
-                    _weightError, 
-                    "weight"
-                  ),
-
-                  _buildTextFieldWithConfirmation(
-                    widget.repsController, 
-                    repsFocus, 
-                    "", 
-                    40, 
-                    _repsError, 
-                    "reps"
-                  ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: InkWell(
-                    onTap: () {
-                      if (context.read<SettingsModel>().hapticsEnabled) {
-                        HapticFeedback.heavyImpact();
-                      }
-
-                      // is not checked means now we are trying to save it
-                      // we dont need to validate inputs when unsaving
-                      if (!_isChecked){
-                        WidgetsBinding.instance.focusManager.primaryFocus?.unfocus();
-                        _validateInputs();
-                        if (_weightError || _repsError || _rpeError) return;
-                      }
-
-                      _clearSavedConfirmation();
-
-                      setState(() {
-                        _isChecked = !_isChecked;
-                        widget.onChanged(_isChecked);
-                      });
-
-                      
-                    },
-                    child: Container(
-                      width: 24.0,
-                      height: 24.0,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: _isChecked ? Colors.blue : Colors.grey,
-                          width: 2,
+                // if (widget.setIndex == 0)
+                //   Row(
+                //     children: [
+                //       const Expanded(child: SizedBox()),
+                //       SizedBox(width: 51, child: Text("RPE", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                //       SizedBox(width: 66, child: Text("Weight", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                //       SizedBox(width: 56, child: Text("Reps", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                //       const SizedBox(width: 40),
+                //     ],
+                //   ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Text(
+                          "${formatRepRange(widget.repsLower, widget.repsUpper)} reps @ ${widget.expectedRPE} RPE",
+                          style: const TextStyle(fontSize: 16),
                         ),
                       ),
-                      child: _isChecked
-                          ? Center(
-                              child: Icon(
-                                Icons.check,
-                                size: 16.0,
-                                color: _isChecked ? Colors.blue : Colors.grey,
-                              ),
-                            )
-                          : null,
                     ),
-                  ),
+
+                    _buildTextFieldWithConfirmation(
+                      widget.rpeController,
+                      rpeFocus,
+                      "",
+                      35,
+                      _rpeError,
+                      "rpe",
+                    ),
+
+                    _buildTextFieldWithConfirmation(
+                      widget.weightController,
+                      weightFocus,
+                      "",
+                      50,
+                      _weightError,
+                      "weight",
+                    ),
+
+                    _buildTextFieldWithConfirmation(
+                      widget.repsController,
+                      repsFocus,
+                      "",
+                      40,
+                      _repsError,
+                      "reps",
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: InkWell(
+                        onTap: () {
+                          if (context.read<SettingsModel>().hapticsEnabled) {
+                            HapticFeedback.heavyImpact();
+                          }
+
+                          // is not checked means now we are trying to save it
+                          // we dont need to validate inputs when unsaving
+                          if (!_isChecked){
+                            WidgetsBinding.instance.focusManager.primaryFocus?.unfocus();
+                            _validateInputs();
+                            if (_weightError || _repsError || _rpeError) return;
+                          }
+
+                          _clearSavedConfirmation();
+
+                          setState(() {
+                            _isChecked = !_isChecked;
+                            widget.onChanged(_isChecked);
+                          });
+
+
+                        },
+                        child: Container(
+                          width: 24.0,
+                          height: 24.0,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _isChecked ? Colors.blue : Colors.grey,
+                              width: 2,
+                            ),
+                          ),
+                          child: _isChecked
+                              ? Center(
+                                  child: Icon(
+                                    Icons.check,
+                                    size: 16.0,
+                                    color: _isChecked ? Colors.blue : Colors.grey,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
       );
-    
+
     } else {
       final double quarterWidth = (screenWidth - 8) / 4 - 32;
       final double halfWidth = (screenWidth - 8) / 2 - 32 - 24;
@@ -390,7 +415,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                   child: Text(
-                    "Target: ${widget.repsLower}-${widget.repsUpper} reps @ ${widget.expectedRPE} RPE",
+                    "Target: ${formatRepRange(widget.repsLower, widget.repsUpper)} reps @ ${widget.expectedRPE} RPE",
                     style: const TextStyle(fontSize: 16),
                   ),
                 ),
@@ -406,30 +431,30 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                       //   ),
                       // ),
                       _buildTextFieldWithConfirmation(
-                        widget.rpeController, 
-                        rpeFocus, 
+                        widget.rpeController,
+                        rpeFocus,
                         "",
-                        quarterWidth, 
-                        _rpeError, 
-                        "rpe"
+                        quarterWidth,
+                        _rpeError,
+                        "rpe",
                       ),
-                
+
                       _buildTextFieldWithConfirmation(
-                        widget.weightController, 
-                        weightFocus, 
-                        "", 
-                        halfWidth, 
-                        _weightError, 
-                        "weight"
+                        widget.weightController,
+                        weightFocus,
+                        "",
+                        halfWidth,
+                        _weightError,
+                        "weight",
                       ),
-                
+
                       _buildTextFieldWithConfirmation(
-                        widget.repsController, 
-                        repsFocus, 
-                        "", 
-                        quarterWidth, 
-                        _repsError, 
-                        "reps"
+                        widget.repsController,
+                        repsFocus,
+                        "",
+                        quarterWidth,
+                        _repsError,
+                        "reps",
                       ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -505,9 +530,8 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     String hint,
     double width,
     bool hasError,
-    String fieldIdentifier, // To know which field this is
-    {bool isShrunk = false,} // if the screen is small we set this true and the label gets displayed on top
-  ) {
+    String fieldIdentifier,
+    ) {
     final bool amIAnimating = _animatingFieldIdentifier == fieldIdentifier;
     final double animValue = _saveAnimationController.value; // 0.0 to 1.0
     final theme = Theme.of(context);
@@ -515,11 +539,6 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     Color currentBgColor = hasError ? theme.colorScheme.errorContainer : theme.scaffoldBackgroundColor;
     double textOpacity = 1.0;
     double checkmarkOpacity = 0.0;
-    Map<String, String> textFromID = {
-      "rpe" : "RPE",
-      "weight" : "Weight",
-      "reps" : "Reps"
-    };
 
     if (amIAnimating) {
       // Animation phases:
@@ -548,11 +567,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
       child: SizedBox(
         width: width,
         // height: 30,
-
-        child: Column(
-          children: [
-            Text("${textFromID[fieldIdentifier]}"),
-            Stack(
+        child: Stack(
               alignment: Alignment.center,
             
               children: [
@@ -627,9 +642,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        );
   }
 }

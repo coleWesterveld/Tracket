@@ -11,6 +11,7 @@ done button is not working as intended
 */
 
 import 'package:firstapp/other_utilities/decimal_input_formatter.dart';
+import 'package:firstapp/other_utilities/format_reps.dart';
 import 'package:firstapp/other_utilities/keyboard_config.dart';
 import 'package:flutter/material.dart';
 import 'package:keyboard_actions/keyboard_actions.dart';
@@ -48,13 +49,18 @@ class _DisplaySetState extends State<DisplaySet> {
   final Function listEquals = const ListEquality().equals;
   final _focusNodes = List.generate(4, (_) => FocusNode());
 
+  // Rep target can be a RANGE (5-8) or a single EXACT number (3). There's no
+  // separate DB column for this — "exact" simply means setLower == setUpper (#7).
+  bool _exactReps = false;
 
   @override
   void initState() {
     super.initState();
     final profile = Provider.of<Profile>(context, listen: false);
     final setData = profile.sets[widget.index][widget.exerciseIndex][widget.setIndex];
-    
+
+    _exactReps = setData.setLower == setData.setUpper;
+
     _setsController = TextEditingController(text: setData.numSets.toString());
     _rpeController = TextEditingController(text: setData.rpe.toString());
     _repsLowerController = TextEditingController(text: setData.setLower.toString());
@@ -75,7 +81,12 @@ class _DisplaySetState extends State<DisplaySet> {
 
   void _saveSet() {
     context.read<Profile>().editIndex = [-1, -1, -1];
-    
+
+    final int lower = int.tryParse(_repsLowerController.text) ?? 0;
+    // In "exact" mode there is only one field — persist it as lower == upper (#7)
+    final int upper =
+        _exactReps ? lower : (int.tryParse(_repsUpperController.text) ?? 0);
+
     final profile = Provider.of<Profile>(context, listen: false);
     profile.setsAssign(
       index1: widget.index,
@@ -84,8 +95,8 @@ class _DisplaySetState extends State<DisplaySet> {
       data: profile.sets[widget.index][widget.exerciseIndex][widget.setIndex].copyWith(
         newNumSets: int.tryParse(_setsController.text) ?? 0,
         newRpe: double.tryParse(_rpeController.text) ?? 0,
-        newSetLower: int.tryParse(_repsLowerController.text) ?? 0,
-        newSetUpper: int.tryParse(_repsUpperController.text) ?? 0,
+        newSetLower: lower,
+        newSetUpper: upper,
       ),
     );
   }
@@ -131,29 +142,54 @@ class _DisplaySetState extends State<DisplaySet> {
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text("Rep Range"),
-                
+                        // Tapping the label flips between a rep RANGE and a single
+                        // EXACT number. Doing it on the label keeps the toggle inside
+                        // the existing 66px edit row (no space for a SegmentedButton).
+                        InkWell(
+                          onTap: () => setState(() {
+                            _exactReps = !_exactReps;
+                            if (_exactReps) {
+                              // collapsing a range -> keep the lower bound as the target
+                              _repsUpperController.text = _repsLowerController.text;
+                            }
+                          }),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_exactReps ? "Exact Reps" : "Rep Range"),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.swap_horiz,
+                                size: 16,
+                                color: widget.theme.colorScheme.secondary,
+                              ),
+                            ],
+                          ),
+                        ),
+
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             SetTextField(
-                              controller: _repsLowerController, 
+                              controller: _repsLowerController,
                               focusNode: _focusNodes[1],
-                              hint: 'Reps', 
+                              hint: 'Reps',
                               maxWidth: 50
                             ),
-                            const SizedBox(width: 8),
-                            const Text("-"),
-                            const SizedBox(width: 8),
-                            SetTextField(
-                              controller: _repsUpperController, 
-                              focusNode: _focusNodes[2],
-                              hint: 'Reps', 
-                              maxWidth: 50
-                            ),
+                            if (!_exactReps) ...[
+                              const SizedBox(width: 8),
+                              const Text("-"),
+                              const SizedBox(width: 8),
+                              SetTextField(
+                                controller: _repsUpperController,
+                                focusNode: _focusNodes[2],
+                                hint: 'Reps',
+                                maxWidth: 50
+                              ),
+                            ],
                           ],
                         ),
-                        
+
                       ],
                     ),
                 
@@ -222,12 +258,19 @@ class _DisplaySetState extends State<DisplaySet> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      Text(
-                        '${context.watch<Profile>().sets[widget.index][widget.exerciseIndex][widget.setIndex].numSets} sets x '
-                        '(${context.watch<Profile>().sets[widget.index][widget.exerciseIndex][widget.setIndex].setLower}-'
-                        '${context.watch<Profile>().sets[widget.index][widget.exerciseIndex][widget.setIndex].setUpper}) reps'
-                        ' @ RPE ${context.watch<Profile>().sets[widget.index][widget.exerciseIndex][widget.setIndex].rpe}',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      Builder(
+                        builder: (context) {
+                          final setData = context
+                              .watch<Profile>()
+                              .sets[widget.index][widget.exerciseIndex][widget.setIndex];
+                          // formatRepRange collapses lower==upper to a single number (#7)
+                          return Text(
+                            '${setData.numSets} sets x '
+                            '${formatRepRange(setData.setLower, setData.setUpper)} reps'
+                            ' @ RPE ${setData.rpe}',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          );
+                        },
                       ),
                     ],
                   ),
