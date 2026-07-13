@@ -1,5 +1,4 @@
 import 'package:firstapp/other_utilities/ensure_length.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 //import 'data_saving.dart';
 import '../database/database_helper.dart';
@@ -35,7 +34,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   List<List<List<TextEditingController>>> workoutRepsTEC;
   List<TextEditingController> workoutNotesTEC;
   List<FocusNode> workoutNotesFocusNodes; // One focus node per exercise
-  List<ExpansionTileController> workoutExpansionControllers;
+  List<ExpansibleController> workoutExpansionControllers;
 
   // this helps track the expansion states, SPECIFICALLY when for the device disconnects and the expansion tiles linked with the controllers will have been disposed
   List<bool> expansionStates;
@@ -52,6 +51,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   Timer? timer;
   bool isPaused = false;
   String? sessionID;
+  int? activeProgramId;
   bool shakeFinish = false;
 
   // versioned by Json structure, in case updates come
@@ -63,7 +63,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
 
       return diff;
     } else{
-      debugPrint("WARN: this should not happen -- workout start time is trying to be read but it is Null");
+      //debugPrint("WARN: this should not happen -- workout start time is trying to be read but it is Null");
     }
     
     // no duration
@@ -76,7 +76,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
 
       return diff;
     } else{
-      debugPrint("WARN: this should not happen -- rest start time is trying to be read but it is Null");
+      //debugPrint("WARN: this should not happen -- rest start time is trying to be read but it is Null");
     }
     
     // no duration
@@ -89,7 +89,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     this.workoutRepsTEC = const <List<List<TextEditingController>>>[],
     this.workoutRpeTEC = const <List<List<TextEditingController>>>[],
     this.workoutWeightTEC = const <List<List<TextEditingController>>>[],
-    this.workoutExpansionControllers = const <ExpansionTileController>[],
+    this.workoutExpansionControllers = const <ExpansibleController>[],
     this.expansionStates = const <bool>[],
     
     required this.dbHelper,
@@ -133,13 +133,13 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   }
 
   Future<void> saveActiveWorkoutState() async {
-    //debugPrint("hey this should run for sure");
+    ////debugPrint("hey this should run for sure");
     if (sessionID == null || activeDayIndex == null) {
-      //debugPrint("1.1 hey this should run for sure");
+      ////debugPrint("1.1 hey this should run for sure");
       await clearActiveWorkoutState(); // Clear if no active session
       return;
     }
-    //debugPrint("1.2 hey this should run for sure");
+    ////debugPrint("1.2 hey this should run for sure");
 
 
     Map<String, String> currentTecValues = {};
@@ -155,12 +155,12 @@ class ActiveWorkoutProvider extends ChangeNotifier {
         }
       }
     }
-   //debugPrint("1.3 hey this should run for sure");
+   ////debugPrint("1.3 hey this should run for sure");
 
 
     //List<bool> currentExpansionStates = expansionStates.map((c) => c.isExpanded).toList();
 
-    //debugPrint("1.4 hey this should run for sure");
+    ////debugPrint("1.4 hey this should run for sure");
 
   List<List<List<int?>>>? currentLoggedRecordIDs;
   if (activeDayIndex != null &&
@@ -179,7 +179,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
       currentLoggedRecordIDs.add(exerciseLoggedIDs);
     }
   } else {
-    debugPrint("WARN: Could not save loggedRecordIDs. activeDayIndex is null or out of bounds for programProvider.sets, or sets not loaded.");
+    //debugPrint("WARN: Could not save loggedRecordIDs. activeDayIndex is null or out of bounds for programProvider.sets, or sets not loaded.");
   }
 
     final snapshot = ActiveWorkoutSnapshot(
@@ -195,44 +195,44 @@ class ActiveWorkoutProvider extends ChangeNotifier {
       loggedRecordIDs: currentLoggedRecordIDs,
     );
 
-    //debugPrint("2 hey this should run for sure");
+    ////debugPrint("2 hey this should run for sure");
 
 
     final prefs = await SharedPreferences.getInstance();
-    //debugPrint("3 hey this should run for sure");
+    ////debugPrint("3 hey this should run for sure");
 
     try {
       final jsonString = jsonEncode(snapshot.toJson());
       await prefs.setString(_snapshotKey, jsonString);
-      //debugPrint('Active workout state SAVED. Session: $sessionID. Key: $_snapshotKey');
+      ////debugPrint('Active workout state SAVED. Session: $sessionID. Key: $_snapshotKey');
     } catch (e) {
-      debugPrint('Error saving workout state: $e');
+      //debugPrint('Error saving workout state: $e');
     }
   }
 
   Future<ActiveWorkoutSnapshot?> loadActiveWorkoutState() async {
     final prefs = await SharedPreferences.getInstance();
     final String? snapshotString = prefs.getString(_snapshotKey);
-    //debugPrint("string is raw here: ${snapshotString}");
+    ////debugPrint("string is raw here: ${snapshotString}");
     if (snapshotString != null) {
       try {
         final snapshot = ActiveWorkoutSnapshot.fromJson(jsonDecode(snapshotString));
-        //debugPrint('Saved workout state loaded for session: ${snapshot.sessionID}');
+        ////debugPrint('Saved workout state loaded for session: ${snapshot.sessionID}');
         return snapshot;
       } catch (e) {
-        debugPrint('Error decoding snapshot: $e. Clearing invalid snapshot.');
+        //debugPrint('Error decoding snapshot: $e. Clearing invalid snapshot.');
         await clearActiveWorkoutState();
         return null;
       }
     }
-    //debugPrint('No saved workout state found.');
+    ////debugPrint('No saved workout state found.');
     return null;
   }
 
   Future<void> clearActiveWorkoutState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_snapshotKey);
-    //debugPrint('Cleared active workout state from SharedPreferences.');
+    ////debugPrint('Cleared active workout state from SharedPreferences.');
   }
 
   // Add this method to your ActiveWorkoutProvider class
@@ -245,13 +245,13 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     // Critical check: Ensure Profile provider's data for this day is available.
     // programProvider.split refers to Profile.split
     if (dayIdx < 0 || dayIdx >= programProvider.split.length) {
-      debugPrint("AWP: Cannot prepare structures. Invalid dayIndex ($dayIdx) or Profile.split not populated for it.");
+      //debugPrint("AWP: Cannot prepare structures. Invalid dayIndex ($dayIdx) or Profile.split not populated for it.");
       return false;
     }
     // It's also crucial that programProvider.exercises[dayIdx] and programProvider.sets[dayIdx] are populated.
     // This should be true if Profile.init() has completed and dayIdx is valid.
 
-    //debugPrint("AWP: Preparing structures for restored day index: $dayIdx");
+    ////debugPrint("AWP: Preparing structures for restored day index: $dayIdx");
 
     // Set the activeDayIndex within ActiveWorkoutProvider
     activeDayIndex = dayIdx;
@@ -267,10 +267,11 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   // Call this method AFTER Profile provider has loaded its data and set the active day
   // based on snapshot.activeDayIndex (and possibly snapshot.activeProgramID).
   Future<bool> restoreFromSnapshot(ActiveWorkoutSnapshot snapshot) async {
-    //debugPrint("Attempting to restore from snapshot for session: ${snapshot.sessionID}");
+    ////debugPrint("Attempting to restore from snapshot for session: ${snapshot.sessionID}");
     // 1. Basic State Restoration
     sessionID = snapshot.sessionID; // Crucial: set this first
     activeDayIndex = snapshot.activeDayIndex;
+    activeProgramId = programProvider.currentProgram.programID;
     workoutStartTime = snapshot.startWorkoutTime;
     lastRestStartTime = snapshot.startRestTime;
     // Ensure programProvider has loaded the correct program and day.
@@ -282,7 +283,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     // `setActiveDay` already does this, but we need to ensure it's for the snapshot's day.
     // If programProvider.split is not populated for the activeDayIndex, this will fail.
     if (activeDayIndex == null || activeDayIndex! >= programProvider.split.length) {
-        debugPrint("Cannot restore: activeDayIndex from snapshot is invalid for current program data.");
+        //debugPrint("Cannot restore: activeDayIndex from snapshot is invalid for current program data.");
         await clearActiveWorkoutState(); // Clear bad snapshot
         return false;
     }
@@ -302,7 +303,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
       try {
         
         if (fieldType == 'notes' && indices.length == 1) {
-          //debugPrint("adding $value to notes");
+          ////debugPrint("adding $value to notes");
           int i = indices[0];
           if (i < workoutNotesTEC.length) workoutNotesTEC[i].text = value;
         } else if (indices.length == 3) {
@@ -311,21 +312,21 @@ class ActiveWorkoutProvider extends ChangeNotifier {
               j < workoutRpeTEC[i].length &&
               k < workoutRpeTEC[i][j].length) { // Check bounds carefully
             if (fieldType == 'rpe') {
-              //debugPrint("adding $value to rpe");
+              ////debugPrint("adding $value to rpe");
 
               workoutRpeTEC[i][j][k].text = value;
             } else if (fieldType == 'weight') {
-              //debugPrint("adding $value to weight");
+              ////debugPrint("adding $value to weight");
 
               workoutWeightTEC[i][j][k].text = value;
             }
             else if (fieldType == 'reps') {
-              //debugPrint("adding $value to reps");
+              ////debugPrint("adding $value to reps");
 
               workoutRepsTEC[i][j][k].text = value;
             }
           } else {
-             debugPrint("Warning: TEC indices out of bounds during restore for key $key");
+             //debugPrint("Warning: TEC indices out of bounds during restore for key $key");
           }
         }
 
@@ -355,18 +356,20 @@ class ActiveWorkoutProvider extends ChangeNotifier {
                         for (int k = 0; k < idsToRestore.length && k < plannedSetToUpdate.numSets; k++) {
                           plannedSetToUpdate.loggedRecordID[k] = idsToRestore[k];
                         }
-                        debugPrint("WARN: LoggedRecordID length mismatch for e$i,s$j. Saved: ${idsToRestore.length}, Current: ${plannedSetToUpdate.numSets}. Adjusted.");
+                        //debugPrint("WARN: LoggedRecordID length mismatch for e$i,s$j. Saved: ${idsToRestore.length}, Current: ${plannedSetToUpdate.numSets}. Adjusted.");
                       }
                     }
                   }
-                } else { debugPrint("num sets mismatch"); }
+                } else { //debugPrint("num sets mismatch");
+                }
               }
             }
-            //debugPrint("LoggedRecordIDs restored by direct modification.");
-          } else { debugPrint("num exercises mismatch"); }
+            ////debugPrint("LoggedRecordIDs restored by direct modification.");
+          } else { //debugPrint("num exercises mismatch");
+          }
         }
       } catch (e) {
-         debugPrint("Error restoring TEC for key $key: $e");
+         //debugPrint("Error restoring TEC for key $key: $e");
       }
     });
 
@@ -403,14 +406,14 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     showHistory = List.filled(programProvider.exercises[activeDayIndex!].length, false, growable: true); // Re-init showHistory if needed
     _calculateExerciseCompletion();
     notifyListeners();
-    //debugPrint("Active workout state fully restored from snapshot.");
+    ////debugPrint("Active workout state fully restored from snapshot.");
     return true;
   }
 
   void _calculateExerciseCompletion(){
     // determines which exercises to mark as 'complete' based on if all sets for that exercise are compeleted
     if (activeDayIndex == null){
-      debugPrint("WARN: invalid call of calculating exercise state when no workout active.");
+      //debugPrint("WARN: invalid call of calculating exercise state when no workout active.");
       return;
 
     } else{
@@ -448,7 +451,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
       if (workoutStartTime != null && !isPaused) {
         final duration = DateTime.now().difference(workoutStartTime!);
         if (duration.inHours >= 12) {
-          debugPrint("Workout exceeded 12 hours (${duration.inHours}h ${duration.inMinutes.remainder(60)}m), auto-finishing and saving");
+          //debugPrint("Workout exceeded 12 hours (${duration.inHours}h ${duration.inMinutes.remainder(60)}m), auto-finishing and saving");
           timer?.cancel();
           setActiveDayAndStartNew(null); // This saves everything and clears the workout
           return; // Exit the timer callback
@@ -462,7 +465,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
         // we get the length of the workout as the duration between now and when the workout started
         // but then pause doesnt work
         // so for every second we are paused, we just move the workout start time forward,
-        // so that the distance between now and the start time (the workout and rest duration) dont change 
+        // so that the distance between now and the start time (the workout and rest duration) dont change
         //  -- they are "paused" (they both move at the same speed)
 
         // these *shouldnt* be null, but yk, just in case
@@ -472,7 +475,8 @@ class ActiveWorkoutProvider extends ChangeNotifier {
         if (lastRestStartTime != null){
           lastRestStartTime = lastRestStartTime!.add(const Duration(seconds: 1));
         }
-        notifyListeners();
+        // No notifyListeners() when paused — displayed times aren't changing,
+        // so there's nothing for consumers to redraw.
       }
     });
   }
@@ -552,7 +556,7 @@ void _initializeStructuresForDay(int dayIdx) {
   // For Expansion Tile Controllers (one per exercise)
   workoutExpansionControllers = List.generate(
     programProvider.exercises[dayIdx].length,
-    (_) => ExpansionTileController(),
+    (_) => ExpansibleController(),
     growable: true,
   );
   expansionStates = List.generate(
@@ -561,11 +565,20 @@ void _initializeStructuresForDay(int dayIdx) {
     growable: true,
   );
 
-  //debugPrint("Structures initialized for day index: $dayIdx with ${programProvider.exercises[dayIdx].length} exercises.");
+  ////debugPrint("Structures initialized for day index: $dayIdx with ${programProvider.exercises[dayIdx].length} exercises.");
 }
 
   // Call this from `update:` or a listener:
   void syncControllersForDay(int dayIndex) {
+    // Safety check: ensure dayIndex is valid
+    if (dayIndex < 0 || 
+        dayIndex >= programProvider.exercises.length || 
+        dayIndex >= programProvider.sets.length ||
+        dayIndex >= programProvider.split.length) {
+      //debugPrint("WARN: syncControllersForDay called with invalid dayIndex $dayIndex");
+      return;
+    }
+    
     final exercisesForDay = programProvider.exercises[dayIndex];
     final plannedSetsForDay = programProvider.sets[dayIndex];
     final int numExercises = exercisesForDay.length;
@@ -574,7 +587,7 @@ void _initializeStructuresForDay(int dayIdx) {
     ensureLength(workoutRpeTEC,    numExercises, () => <List<TextEditingController>>[]);
     ensureLength(workoutWeightTEC, numExercises, () => <List<TextEditingController>>[]);
     ensureLength(workoutRepsTEC,   numExercises, () => <List<TextEditingController>>[]);
-    ensureLength(workoutExpansionControllers, numExercises, () => ExpansionTileController());
+    ensureLength(workoutExpansionControllers, numExercises, () => ExpansibleController());
     ensureLength(expansionStates, numExercises, () => false);
     ensureLength(isExerciseComplete, numExercises, () => false);
     if (showHistory != null) ensureLength(showHistory!, numExercises, () => false);
@@ -608,17 +621,13 @@ void _initializeStructuresForDay(int dayIdx) {
   }
   // Call this when user explicitly starts a NEW workout or switches days
   Future<void> setActiveDayAndStartNew(int? index, {String? existingSessionId}) async {
-    workoutStartTime = DateTime.now();
-    lastRestStartTime = DateTime.now();
-    if (activeDayIndex != null && activeDayIndex != index) {
-      // If switching from another active day, consider saving its state if it wasn't completed
-      // For now, we assume starting a new day/workout clears any previous in-progress state
-    }
-
     if (index != null && index >= 0 && index < programProvider.split.length) {
+      workoutStartTime = DateTime.now();
+      lastRestStartTime = DateTime.now();
       await clearActiveWorkoutState(); // Clear any old snapshot when starting fresh for a day
 
       activeDayIndex = index;
+      activeProgramId = programProvider.currentProgram.programID;
       _initializeStructuresForDay(activeDayIndex!); // Use the helper
 
       if (existingSessionId != null) {
@@ -633,28 +642,96 @@ void _initializeStructuresForDay(int dayIdx) {
       shakeFinish = false;
 
     } else { // Clearing active day
+      // Capture temp day info before clearing state
+      final bool wasTemporary = activeDay?.isTemporary == true;
+      final int? tempDayIndex = wasTemporary ? activeDayIndex : null;
+
       timer?.cancel();
-      
+
       // unlog all sets -- we lose ID reference, these are logged now
       for (var day in programProvider.sets){
         for (var exercise in day){
           for (var set in exercise){
             for (int i = 0; i < set.loggedRecordID.length; i++){
-              set.loggedRecordID[i] =null;
+              set.loggedRecordID[i] = null;
             }
           }
         }
       }
-      
+
       _disposeAllTECs();
       activeDayIndex = null;
+      activeProgramId = null;
       activeDay = null;
       showHistory = null;
       sessionID = null;
       isPaused = false;
       nextSet = [0,0,0];
+      workoutStartTime = null;
+      lastRestStartTime = null;
       await clearActiveWorkoutState(); // Clear snapshot when workout is explicitly ended/cleared
+
+      // Delete the temporary day from DB and memory after all state is cleared
+      if (wasTemporary && tempDayIndex != null) {
+        await programProvider.removeTemporaryDay(tempDayIndex);
+      }
     }
+    notifyListeners();
+  }
+
+  /// Hard-discards the active workout (#13): deletes every set logged this session
+  /// from the DB, then tears down all in-memory workout state.
+  ///
+  /// Sets are persisted immediately on each checkbox, so "Finish" (which only
+  /// clears memory) keeps them — this is the ONLY path that removes them.
+  Future<void> cancelActiveWorkout() async {
+    final String? cancelledSession = sessionID;
+
+    // Capture temp day info before clearing state (mirrors setActiveDayAndStartNew)
+    final bool wasTemporary = activeDay?.isTemporary == true;
+    final int? tempDayIndex = wasTemporary ? activeDayIndex : null;
+
+    timer?.cancel();
+
+    // Delete everything logged under this session from the DB.
+    if (cancelledSession != null) {
+      try {
+        await dbHelper.deleteSessionRecords(cancelledSession);
+      } catch (e) {
+        debugPrint("Failed to delete records for cancelled session: $e");
+      }
+    }
+
+    // Null out every loggedRecordID — those rows no longer exist.
+    for (var day in programProvider.sets) {
+      for (var exercise in day) {
+        for (var set in exercise) {
+          for (int i = 0; i < set.loggedRecordID.length; i++) {
+            set.loggedRecordID[i] = null;
+          }
+        }
+      }
+    }
+
+    _disposeAllTECs();
+    activeDayIndex = null;
+    activeProgramId = null;
+    activeDay = null;
+    showHistory = null;
+    sessionID = null;
+    isPaused = false;
+    nextSet = [0, 0, 0];
+    shakeFinish = false;
+    isExerciseComplete = [];
+    workoutStartTime = null;
+    lastRestStartTime = null;
+    await clearActiveWorkoutState();
+
+    // Drop the one-off day too, if this was a free workout.
+    if (wasTemporary && tempDayIndex != null) {
+      await programProvider.removeTemporaryDay(tempDayIndex);
+    }
+
     notifyListeners();
   }
 
@@ -662,12 +739,12 @@ void _initializeStructuresForDay(int dayIdx) {
   String _generateNewSessionId() {
     final now = DateTime.now();
     final timestamp = now.toIso8601String();
-    // debugPrint("Generated new session ID: $timestamp");
+    // //debugPrint("Generated new session ID: $timestamp");
     return timestamp;
   }
 
   // void startTimers() {
-  //   debugPrint("UI Timer and Stopwatches started!");
+  //   //debugPrint("UI Timer and Stopwatches started!");
   //   timer?.cancel(); // Ensure only one UI timer
   //   timer = Timer.periodic(const Duration(seconds: 1), (_) {
   //     if (!isPaused) {
@@ -739,20 +816,67 @@ void _initializeStructuresForDay(int dayIdx) {
     else if (currentSetIndex < programProvider.sets[activeDayIndex!][currentExerciseIndex].length - 1) {
       // Move to first subset of next set in same exercise
       nextSet = [currentExerciseIndex, currentSetIndex + 1, 0];
-      
-    } 
+
+      // Carry the just-typed reps/weight/rpe down into the next set cluster's
+      // first row, but ONLY when that cluster targets the same rep range AND rpe
+      // as the one just finished (otherwise the suggestion would mislead) (#8).
+      final prevPlanned = programProvider.sets[activeDayIndex!][currentExerciseIndex][currentSetIndex];
+      final nextPlanned = programProvider.sets[activeDayIndex!][currentExerciseIndex][currentSetIndex + 1];
+      final bool targetsMatch = prevPlanned.setLower == nextPlanned.setLower &&
+          prevPlanned.setUpper == nextPlanned.setUpper &&
+          prevPlanned.rpe == nextPlanned.rpe;
+
+      final nextReps = workoutRepsTEC[currentExerciseIndex][currentSetIndex + 1][0];
+      final nextRpe = workoutRpeTEC[currentExerciseIndex][currentSetIndex + 1][0];
+      final nextWeight = workoutWeightTEC[currentExerciseIndex][currentSetIndex + 1][0];
+
+      if (targetsMatch &&
+          nextReps.text.isEmpty &&
+          nextRpe.text.isEmpty &&
+          nextWeight.text.isEmpty) {
+        nextReps.text = workoutRepsTEC[currentExerciseIndex][currentSetIndex][currentSubsetIndex].text;
+        nextRpe.text = workoutRpeTEC[currentExerciseIndex][currentSetIndex][currentSubsetIndex].text;
+        nextWeight.text = workoutWeightTEC[currentExerciseIndex][currentSetIndex][currentSubsetIndex].text;
+
+        // Select all so the user can overwrite by typing.
+        if (nextReps.text.isNotEmpty) {
+          nextReps.selection = TextSelection(baseOffset: 0, extentOffset: nextReps.text.length);
+        }
+        if (nextRpe.text.isNotEmpty) {
+          nextRpe.selection = TextSelection(baseOffset: 0, extentOffset: nextRpe.text.length);
+        }
+        if (nextWeight.text.isNotEmpty) {
+          nextWeight.selection = TextSelection(baseOffset: 0, extentOffset: nextWeight.text.length);
+        }
+      }
+    }
     // Check if there are more exercises in workout
     else if (currentExerciseIndex < programProvider.exercises[activeDayIndex!].length - 1) {
       // Move to first subset of first set in next exercise
       nextSet = [currentExerciseIndex + 1, 0, 0];
     }
-    // Else we're at the end of the workout
+    // Else we're at the end of the (positional) list
     else {
-      shakeFinish = true;
       // Keep nextSet pointing to last subset
       nextSet = [currentExerciseIndex, currentSetIndex, currentSubsetIndex];
     }
 
+    // "Finish" should only shake once EVERY exercise is actually complete, not
+    // merely when the last-listed exercise is done (#9). Recompute real
+    // completion and gate the shake on all-complete.
+    _calculateExerciseCompletion();
+    shakeFinish = isExerciseComplete.isNotEmpty && isExerciseComplete.every((c) => c);
+
+    notifyListeners();
+  }
+
+  // Public entry point so the workout page can keep isExerciseComplete as the
+  // single source of truth (instead of duplicating the all-logged loop inline).
+  // Also re-derives shakeFinish, so UN-logging a set after finishing everything
+  // correctly stops the Finish button from suggesting completion (#9).
+  void recalculateCompletion() {
+    _calculateExerciseCompletion();
+    shakeFinish = isExerciseComplete.isNotEmpty && isExerciseComplete.every((c) => c);
     notifyListeners();
   }
 }

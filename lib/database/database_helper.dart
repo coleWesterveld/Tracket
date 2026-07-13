@@ -16,12 +16,9 @@
 // If the user wants to use metric, a flag will be stored in user_settings
 // And values will be converted upon returning from fetch if indicated by useMetric function flag
 
-import 'package:firstapp/other_utilities/events.dart';
 import 'package:firstapp/other_utilities/format_weekday.dart';
-import 'package:intl/intl.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:flutter/material.dart';
 import 'package:firstapp/providers_and_settings/program_provider.dart';
 import 'profile.dart';
 import 'dart:async';
@@ -66,16 +63,17 @@ class DatabaseHelper {
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-    debugPrint('path: $path');
+    ////debugPrint('path: $path');
 
     // open database at path, create tables if first time opening
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
-      }, 
+      },
     );
   }
 
@@ -114,6 +112,7 @@ class DatabaseHelper {
         program_id INTEGER NOT NULL,
         day_color INTEGER NOT NULL,
         workout_time TEXT,
+        is_temporary INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (program_id) REFERENCES programs (id) ON DELETE CASCADE
       );
     '''
@@ -127,6 +126,7 @@ class DatabaseHelper {
         notes TEXT NOT NULL,
         day_id INTEGER NOT NULL,
         exercise_id INTEGER NOT NULL,
+        superset_group INTEGER,
         FOREIGN KEY (exercise_id) REFERENCES exercises (id) ON DELETE CASCADE,
         FOREIGN KEY (day_id) REFERENCES days (id) ON DELETE CASCADE
       );
@@ -246,6 +246,21 @@ class DatabaseHelper {
 
   }
 
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE days ADD COLUMN is_temporary INTEGER NOT NULL DEFAULT 0'
+      );
+    }
+    if (oldVersion < 3) {
+      // Supersets (#3): exercises on the same day sharing a non-null
+      // superset_group are one superset. Nullable — existing rows stay ungrouped.
+      await db.execute(
+        'ALTER TABLE exercise_instances ADD COLUMN superset_group INTEGER'
+      );
+    }
+  }
+
   // Runs on startup - loads all exercises from a text file into the database
   Future<void> _loadExercisesFromText(Database db) async {
     final data = await rootBundle.loadString('assets/exercises.txt');
@@ -289,26 +304,26 @@ class DatabaseHelper {
 
     // Insert initial exercises for each day
 
-    // Push
-    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 0, 'exercise_id': 90, 'notes' : ''}); // Barbell Bench Press
-    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 1, 'exercise_id': 3, 'notes' : ''}); // Triceps Pushdown
-    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 2, 'exercise_id': 58, 'notes' : ''}); // Side Lateral Raise
-    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 3, 'exercise_id': 53, 'notes' : ''}); // Dumbbell Shoulder Press
-    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 4, 'exercise_id': 76, 'notes' : ''}); // Cable Chest Fly
+    // Push (day_id = 1) — instance IDs 1-5
+    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 0, 'exercise_id': 115, 'notes': ''}); // Barbell Bench Press
+    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 1, 'exercise_id': 107, 'notes': ''}); // Barbell Overhead Press
+    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 2, 'exercise_id': 78,  'notes': ''}); // Dumbbell Lateral Raise
+    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 3, 'exercise_id': 7,   'notes': ''}); // Triceps Pushdown
+    batch.insert('exercise_instances', {'day_id': 1, 'exercise_order': 4, 'exercise_id': 99,  'notes': ''}); // Cable Chest Fly
 
-    // Pull
-    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 0, 'exercise_id': 20, 'notes' : ''}); // Pullups
-    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 1, 'exercise_id': 14, 'notes' : ''}); // Seated Cable Rows
-    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 2, 'exercise_id': 19, 'notes' : ''}); // Reverse Machine Flyes
-    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 3, 'exercise_id': 38, 'notes' : ''}); // Hammer Curls
-    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 4, 'exercise_id': 89, 'notes' : ''}); // Barbell Rows
+    // Pull (day_id = 2) — instance IDs 6-10
+    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 0, 'exercise_id': 30,  'notes': ''}); // Pullups
+    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 1, 'exercise_id': 114, 'notes': ''}); // Barbell Bent Over Row
+    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 2, 'exercise_id': 22,  'notes': ''}); // Seated Cable Row
+    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 3, 'exercise_id': 56,  'notes': ''}); // Hammer Curl
+    batch.insert('exercise_instances', {'day_id': 2, 'exercise_order': 4, 'exercise_id': 65,  'notes': ''}); // Face Pull
 
-    // Legs
-    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 0, 'exercise_id': 81, 'notes' : ''}); // Barbell Squat
-    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 1, 'exercise_id': 16, 'notes' : ''}); // Romanian Deadlift
-    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 2, 'exercise_id': 9, 'notes' : ''}); // Standing Calf Raises
-    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 3, 'exercise_id': 12, 'notes' : ''}); // Seated Leg Curl
-    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 4, 'exercise_id': 27, 'notes' : ''}); // Leg Extensions
+    // Legs (day_id = 3) — instance IDs 11-15
+    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 0, 'exercise_id': 105, 'notes': ''}); // Barbell Squat
+    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 1, 'exercise_id': 24,  'notes': ''}); // Romanian Deadlift
+    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 2, 'exercise_id': 42,  'notes': ''}); // Leg Press
+    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 3, 'exercise_id': 20,  'notes': ''}); // Seated Leg Curl
+    batch.insert('exercise_instances', {'day_id': 3, 'exercise_order': 4, 'exercise_id': 14,  'notes': ''}); // Standing Calf Raise
 
     // Sets for each exercise (3 sets, 5-8 reps, RPE 8)
     for (int i = 1; i <= 15; i++) {
@@ -336,44 +351,248 @@ class DatabaseHelper {
       // rest of settings default
     });
 
-    // inserting mock data to test analytics page
-    // TODO: remove for release
-    // I think I should plot a first and second and potentially more sets on the same graph
-    // so the line for second set will either be on top of or likely beloow the top set
     if (kDebugMode) {
-      List<String> feelings = [
-        "Doc", "Grumpy", "Happy", "Sleepy", "Bashful", "Sneezy", "Dopey"
+      final Random random = Random(42); // Seeded for reproducible screenshots
+      final DateTime now = DateTime.now();
+      final DateTime historyStart = now.subtract(const Duration(days: 182));
+
+      // ── Helpers ──────────────────────────────────────────────────────────────
+      double r2_5(double v) => (v / 2.5).round() * 2.5;
+      double r5(double v)   => (v / 5.0).round()  * 5.0;
+
+      // Inserts 3 sets for one exercise into the batch, all sharing sessionId.
+      void add3Sets(String sessionId, DateTime base, int minuteOffset,
+          int exId, double weight, double reps, double rpe,
+          String note, String dayTitle) {
+        for (int s = 0; s < 3; s++) {
+          batch.insert('set_log', {
+            'session_id': sessionId,
+            'date': base.add(Duration(minutes: minuteOffset + s * 3)).toIso8601String(),
+            'num_sets': 1,
+            'reps': reps,
+            'weight': weight,
+            'rpe': rpe,
+            'history_note': s == 0 ? note : '',
+            'exercise_id': exId,
+            'day_title': dayTitle,
+            'program_title': 'Simple PPL Split',
+          });
+        }
+      }
+
+      void addPushSession(String sessionId, DateTime date,
+          double benchW, double benchR,
+          double ohpW,   double ohpR,
+          double latW,   double latR,
+          double triW,   double triR,
+          double flyW,   double flyR,
+          String note) {
+        add3Sets(sessionId, date,  0, 115, benchW, benchR, 8.0,  note, 'Push');
+        add3Sets(sessionId, date, 14, 107, ohpW,   ohpR,   7.5,  '',   'Push');
+        add3Sets(sessionId, date, 29,  78, latW,   latR,   7.0,  '',   'Push');
+        add3Sets(sessionId, date, 41,   7, triW,   triR,   7.5,  '',   'Push');
+        add3Sets(sessionId, date, 53,  99, flyW,   flyR,   7.0,  '',   'Push');
+      }
+
+      void addPullSession(String sessionId, DateTime date,
+          double pullR,
+          double rowW,
+          double cRowW,
+          double curlW,
+          double fpW,
+          String note) {
+        add3Sets(sessionId, date,  0,  30,  0.0,  pullR, 8.0,  note, 'Pull');
+        add3Sets(sessionId, date, 12, 114, rowW,   5.0,  8.0,  '',   'Pull');
+        add3Sets(sessionId, date, 25,  22, cRowW,  8.0,  7.5,  '',   'Pull');
+        add3Sets(sessionId, date, 37,  56, curlW, 10.0,  7.5,  '',   'Pull');
+        add3Sets(sessionId, date, 49,  65, fpW,   15.0,  7.0,  '',   'Pull');
+      }
+
+      void addLegsSession(String sessionId, DateTime date,
+          double squatW, double squatR,
+          double rdlW,
+          double lpW,
+          double lcW,
+          double calfW,
+          String note) {
+        add3Sets(sessionId, date,  0, 105, squatW, squatR, 8.0,  note, 'Legs');
+        add3Sets(sessionId, date, 17,  24, rdlW,   8.0,    7.5,  '',   'Legs');
+        add3Sets(sessionId, date, 31,  42, lpW,   10.0,    7.5,  '',   'Legs');
+        add3Sets(sessionId, date, 44,  20, lcW,   10.0,    7.5,  '',   'Legs');
+        add3Sets(sessionId, date, 56,  14, calfW, 15.0,    7.0,  '',   'Legs');
+      }
+
+      // ── Goals ─────────────────────────────────────────────────────────────────
+      // Bench: goal 225 lb  →  most-recent e1RM ≈ 191 lb  →  ~85% progress
+      // Squat: goal 315 lb  →  most-recent e1RM ≈ 222 lb  →  ~70% progress
+      batch.insert('goals', {'goal_weight': 225.0, 'exercise_id': 115});
+      batch.insert('goals', {'goal_weight': 315.0, 'exercise_id': 105});
+
+      // ── 26-week history (ends ≥14 days ago, 2 sessions/week per day type) ─────
+      final List<String> pushNotes = [
+        'Good session, bench felt smooth. Kept form tight throughout.',
+        'Shoulders a bit tight — used closer grip on OHP.',
+        'Hit a PR on bench! All 3 sets felt controlled.',
+        'Low energy but pushed through. Glad I showed up.',
+        'Wrist wraps made a big difference on OHP today.',
+        'Chest pump was great. Kept rest short.',
+        'Paused reps on bench — really helped the bottom.',
+        '',
       ];
-      Random random = Random();
+      final List<String> pullNotes = [
+        'Pull-ups getting stronger — added a rep on every set.',
+        'Back felt pumped. Rows were heavy but form was solid.',
+        'Focused on squeezing at the top of each pull-up.',
+        'Grip was failing on rows — chalk next time.',
+        '',
+        'Biceps blew up on hammer curls today.',
+      ];
+      final List<String> legsNotes = [
+        'Good depth on squats. Knees tracked well over toes.',
+        'Quads on fire after leg press — excellent session.',
+        'Added 5 lbs to squats. Heavy but stayed tight.',
+        '',
+        'Paused squats felt amazing, really loaded up the quads.',
+        'RDL weight is climbing — hamstrings have never felt this strong.',
+        '',
+      ];
 
-      DateTime startDate = DateTime.now().subtract(const Duration(days: 500));
-      double baseWeight = 180; // Start weight lower to simulate progression
+      int pni = 0, lni = 0, legi = 0;
 
-      for (int i = 1; i <= 500; i++) {
-        double weight = baseWeight + (i * 2) + random.nextInt(10) - 5; // Linear increase + noise
-        int reps = 6 + random.nextInt(3) - 1; // Small variation in reps (5-7)
-        int rpe = 7 + random.nextInt(3) - 1; // RPE fluctuates (6-8)
+      for (int week = 0; week < 26; week++) {
+        final double p = week / 25.0; // progression 0→1
 
-        batch.insert('set_log', {
-          'id': i,
-          'session_id': startDate.add(Duration(days: i)).toIso8601String(),
-          'date': startDate.add(Duration(days: i)).toIso8601String(), // Dates increase over time
-          'num_sets': 1,
-          'reps': reps,
-          'weight': weight, // Round to nearest whole number
-          'rpe': rpe,
-          'history_note': "Feeling ${feelings[i % feelings.length]} today.",
-          'exercise_id': 86, // Hardcoded to reference "bench press - medium grip"
-          'day_title' : "Bench + Upper",
-          'program_title' : "Push Pull Legs Split"
-        });
+        // Push: Mon (+0) and Thu (+3)
+        for (final int off in [0, 3]) {
+          final DateTime d0 = historyStart.add(Duration(days: week * 7 + off));
+          final DateTime d  = DateTime(d0.year, d0.month, d0.day, 17, 0);
+          if (!d.isBefore(now.subtract(const Duration(days: 14)))) continue;
+          final String sid = 'push_w${week}_o$off';
+          addPushSession(sid, d,
+            r2_5(135.0 + p * 20.0 + (random.nextDouble() - 0.5) * 4.0),
+            (5.0 + (random.nextInt(3) - 1)).clamp(3.0, 7.0),
+            r5(85.0  + p * 30.0 + (random.nextDouble() - 0.5) * 4.0),
+            (5.0 + (random.nextInt(3) - 1)).clamp(3.0, 7.0),
+            r5(20.0  + p * 10.0 + (random.nextDouble() - 0.3) * 2.0),
+            (12.0 + (random.nextInt(3) - 1)).clamp(10.0, 15.0),
+            r5(55.0  + p * 20.0 + (random.nextDouble() - 0.5) * 4.0),
+            (10.0 + (random.nextInt(3) - 1)).clamp(8.0, 12.0),
+            r5(25.0  + p * 15.0 + (random.nextDouble() - 0.3) * 2.0),
+            12.0,
+            pushNotes[pni++ % pushNotes.length],
+          );
+        }
+
+        // Pull: Tue (+1) and Fri (+4)
+        for (final int off in [1, 4]) {
+          final DateTime d0 = historyStart.add(Duration(days: week * 7 + off));
+          final DateTime d  = DateTime(d0.year, d0.month, d0.day, 18, 0);
+          if (!d.isBefore(now.subtract(const Duration(days: 14)))) continue;
+          final String sid = 'pull_w${week}_o$off';
+          addPullSession(sid, d,
+            (5.0 + p * 4.0 + (random.nextDouble() - 0.5) * 1.5).clamp(3.0, 12.0).roundToDouble(),
+            r5(115.0 + p * 40.0 + (random.nextDouble() - 0.5) * 6.0),
+            r5(100.0 + p * 30.0 + (random.nextDouble() - 0.5) * 4.0),
+            r5(35.0  + p * 20.0 + (random.nextDouble() - 0.5) * 4.0),
+            r5(40.0  + p * 15.0),
+            pullNotes[lni++ % pullNotes.length],
+          );
+        }
+
+        // Legs: Wed (+2) and Sat (+5)
+        for (final int off in [2, 5]) {
+          final DateTime d0 = historyStart.add(Duration(days: week * 7 + off));
+          final DateTime d  = DateTime(d0.year, d0.month, d0.day, 16, 30);
+          if (!d.isBefore(now.subtract(const Duration(days: 14)))) continue;
+          final String sid = 'legs_w${week}_o$off';
+          addLegsSession(sid, d,
+            r5(155.0 + p * 30.0 + (random.nextDouble() - 0.5) * 8.0),
+            (5.0 + (random.nextInt(3) - 1)).clamp(3.0, 7.0),
+            r5(155.0 + p * 40.0 + (random.nextDouble() - 0.5) * 6.0),
+            r5(225.0 + p * 60.0 + (random.nextDouble() - 0.5) * 10.0),
+            r5(70.0  + p * 20.0 + (random.nextDouble() - 0.5) * 4.0),
+            r5(115.0 + p * 40.0),
+            legsNotes[legi++ % legsNotes.length],
+          );
+        }
+      }
+
+      // ── Penultimate sessions (8-10 days ago) — defines "previous" for tickers ─
+      // Push previous: 8 days ago
+      //   bench 150×5, OHP 110×5, lateral 25×12, tricep 65×10, fly 35×12
+      {
+        final DateTime d0 = now.subtract(const Duration(days: 8));
+        final DateTime d  = DateTime(d0.year, d0.month, d0.day, 17, 0);
+        addPushSession('push_prev', d,
+          150.0, 5.0, 110.0, 5.0, 25.0, 12.0, 65.0, 10.0, 35.0, 12.0, '');
+      }
+      // Pull previous: 10 days ago
+      //   pullups 7, row 140, cable-row 120, curl 50, face-pull 50
+      {
+        final DateTime d0 = now.subtract(const Duration(days: 10));
+        final DateTime d  = DateTime(d0.year, d0.month, d0.day, 18, 0);
+        addPullSession('pull_prev', d, 7.0, 140.0, 120.0, 50.0, 50.0, '');
+      }
+      // Legs previous: 9 days ago
+      //   squat 175×5, RDL 185, leg-press 265, leg-curl 85, calf 145
+      {
+        final DateTime d0 = now.subtract(const Duration(days: 9));
+        final DateTime d  = DateTime(d0.year, d0.month, d0.day, 16, 30);
+        addLegsSession('legs_prev', d, 175.0, 5.0, 185.0, 265.0, 85.0, 145.0, '');
+      }
+
+      // ── Recent sessions (2-6 days ago) — defines "recent" for tickers ─────────
+      // Tickers shown:
+      //   Push  → bench +5 lb, OHP +1 rep, lateral same, tricep same, fly same
+      //   Pull  → pullups +1 rep, row +5 lb, cable-row same, curl same, face-pull same
+      //   Legs  → squat +5 lb, RDL same, leg-press +5 lb, leg-curl same, calf same
+
+      // Push recent: 6 days ago
+      {
+        final DateTime d0 = now.subtract(const Duration(days: 6));
+        final DateTime d  = DateTime(d0.year, d0.month, d0.day, 17, 30);
+        addPushSession('push_recent', d,
+          155.0, 5.0, 110.0, 6.0, 25.0, 12.0, 65.0, 10.0, 35.0, 12.0,
+          'Good session, bench felt smooth. Hit depth on all reps.');
+      }
+      // Pull recent: 4 days ago
+      {
+        final DateTime d0 = now.subtract(const Duration(days: 4));
+        final DateTime d  = DateTime(d0.year, d0.month, d0.day, 18, 0);
+        addPullSession('pull_recent', d,
+          8.0, 145.0, 120.0, 50.0, 50.0,
+          'Good pump. Rows felt heavy — progress on track.');
+      }
+      // Legs recent: 2 days ago
+      {
+        final DateTime d0 = now.subtract(const Duration(days: 2));
+        final DateTime d  = DateTime(d0.year, d0.month, d0.day, 16, 45);
+        addLegsSession('legs_recent', d,
+          180.0, 5.0, 185.0, 270.0, 85.0, 145.0,
+          'Good depth today. Third set was a grind but kept form tight.');
       }
     }
 
-    
-
     // Execute all operations in a single batch
     await batch.commit();
+
+    // Post-commit debug-only updates (notes on exercise instances, skip tutorial)
+    if (kDebugMode) {
+      await db.update(
+        'exercise_instances',
+        {'notes': 'Keep shoulder blades retracted & pinched. Slight arch, feet flat. '
+            'Touch low chest. 3-sec descent on hypertrophy sets.'},
+        where: 'id = ?',
+        whereArgs: [1], // Barbell Bench Press instance
+      );
+      await db.update(
+        'exercise_instances',
+        {'notes': 'High bar. Knees track over toes. Chest up, sit back into squat. '
+            'Keep heels flat. Use wraps for top sets.'},
+        where: 'id = ?',
+        whereArgs: [11], // Barbell Squat instance
+      );
+    }
   }
 
   // this is intended to be run when a user finishes a workout
@@ -385,8 +604,10 @@ class DatabaseHelper {
   // INITIAL LIST POPULATING
   // the following functions run every app opening, retrieve data from database and populates lists in memory
   Future<List<Day>> initializeSplitList(int programId) async {
+    // Clean up any orphaned temporary days left over from crashed/killed sessions
+    await deleteTemporaryDays(programId);
 
-    // Fetch days from the database
+    // Fetch days from the database (fetchDays already excludes temporary days)
     final List<Map<String, dynamic>> daysData = await fetchDays(programId);
 
     // Map the database rows to day objects
@@ -395,12 +616,13 @@ class DatabaseHelper {
         dayOrder: day['day_order'],
         programID: programId,
         dayColor: day['day_color'],
-        dayTitle: day['day_title'], 
+        dayTitle: day['day_title'],
         dayID: day['id'],
-        workoutTime: day['workout_time'] != null 
-          ? stringToTimeOfDay(day['workout_time']) 
+        workoutTime: day['workout_time'] != null
+          ? stringToTimeOfDay(day['workout_time'])
           : null,
-        gear: day['gear']
+        gear: day['gear'],
+        isTemporary: (day['is_temporary'] as int? ?? 0) == 1,
       );
     }).toList();
 
@@ -408,67 +630,104 @@ class DatabaseHelper {
   }
 
   Future<List<List<Exercise>>> initializeExerciseList(int programID) async {
-    List<List<Exercise>> exerciseList = [];
+    final days = await fetchDays(programID);
+    if (days.isEmpty) return [];
 
-    // Fetch days from the database
-    List<Map<String, dynamic>> days = await fetchDays(programID);
+    final dayIds = days.map((d) => d['id'] as int).toList();
+    final placeholders = dayIds.map((_) => '?').join(',');
 
-    for (var day in days){
-      // for each day, fetch its corresponding exercises
-      // TODO: join title to exercise instance
-      List<Map<String, dynamic>> exerciseData = await fetchExerciseInstances(day['id']);
+    // Single query for all exercise instances across all days (instead of one per day)
+    final db = await database;
+    final exerciseData = await db.rawQuery('''
+      SELECT ei.id, ei.exercise_order, ei.notes, ei.day_id, ei.exercise_id,
+             ei.superset_group,
+             e.exercise_title
+      FROM exercise_instances ei
+      JOIN exercises e ON ei.exercise_id = e.id
+      WHERE ei.day_id IN ($placeholders)
+      ORDER BY ei.day_id ASC, ei.exercise_order ASC
+    ''', dayIds);
 
-      // map each exercise to an exercise object, return 2d list of exercises
-      List<Exercise> exerciseDataList = exerciseData.map((exercise) {
-
-        return Exercise(
-          id: exercise['id'],
-          exerciseID: exercise['exercise_id'],
-          dayID: exercise['day_id'],
-          exerciseTitle: exercise['exercise_title'],
-          exerciseOrder: exercise['exercise_order'],
-          notes: exercise['notes']
-        );
-      }).toList();
-
-      exerciseList.add(exerciseDataList);
+    // Group exercises by day_id
+    final Map<int, List<Exercise>> byDay = {};
+    for (final row in exerciseData) {
+      final dayId = row['day_id'] as int;
+      byDay.putIfAbsent(dayId, () => []).add(Exercise(
+        id: row['id'] as int,
+        exerciseID: row['exercise_id'] as int,
+        dayID: dayId,
+        exerciseTitle: row['exercise_title'] as String,
+        exerciseOrder: row['exercise_order'] as int,
+        notes: row['notes'] as String,
+        supersetGroup: row['superset_group'] as int?,
+      ));
     }
 
+    // Return in days order, preserving empty days as []
     // 2d list indexed exerciseList[day][exercise] to retrieve data
-    return exerciseList;
+    return days.map((d) => byDay[d['id'] as int] ?? <Exercise>[]).toList();
   }
 
   Future<List<List<List<PlannedSet>>>> initializeSetList(int programID) async {
-    List<List<List<PlannedSet>>> setList = [];
+    final days = await fetchDays(programID);
+    if (days.isEmpty) return [];
 
-    List<Map<String, dynamic>> days = await fetchDays(programID);
+    final dayIds = days.map((d) => d['id'] as int).toList();
+    final dayPlaceholders = dayIds.map((_) => '?').join(',');
 
-    // initialize 3d list indexed setList[day][exercise][set] to get data
-    for (int i = 0; i < days.length; i++){//(var day in days){
-      setList.add([]);
-      List<Map<String, dynamic>> exercises = await fetchExerciseInstances(days[i]['id']);
-      for (int j = 0; j < exercises.length; j++){//(var exercise in exercises){
-        List<Map<String, dynamic>> setData = await fetchPlannedSets(exercises[j]['id']);
+    final db = await database;
 
-        List<PlannedSet> setDataList = setData.map((aSet) {
+    // One query for all exercise instances across all days (instead of one per day)
+    final exerciseRows = await db.rawQuery('''
+      SELECT id, day_id, exercise_order
+      FROM exercise_instances
+      WHERE day_id IN ($dayPlaceholders)
+      ORDER BY day_id ASC, exercise_order ASC
+    ''', dayIds);
 
-          return PlannedSet(
-
-            exerciseID: aSet['exercise_instance_id'],
-            numSets: aSet['num_sets'],
-            setLower: aSet['set_lower'],
-            setUpper: aSet['set_upper'],
-            setID: aSet['id'],
-            setOrder: aSet['set_order'],
-            rpe: aSet['rpe'],
-
-          );
-        }).toList();
-
-        setList[i].add(setDataList);
-      }
+    if (exerciseRows.isEmpty) {
+      return days.map((_) => <List<PlannedSet>>[]).toList();
     }
-    return setList;
+
+    final exIds = exerciseRows.map((e) => e['id'] as int).toList();
+    final exPlaceholders = exIds.map((_) => '?').join(',');
+
+    // One query for all planned sets across all exercises (instead of one per exercise)
+    final setRows = await db.rawQuery('''
+      SELECT id, num_sets, set_lower, set_upper, exercise_instance_id, set_order, rpe
+      FROM plannedSets
+      WHERE exercise_instance_id IN ($exPlaceholders)
+      ORDER BY exercise_instance_id ASC, set_order ASC
+    ''', exIds);
+
+    // Group planned sets by exercise_instance_id
+    final Map<int, List<PlannedSet>> setsByExId = {};
+    for (final row in setRows) {
+      final exId = row['exercise_instance_id'] as int;
+      setsByExId.putIfAbsent(exId, () => []).add(PlannedSet(
+        exerciseID: exId,
+        numSets: row['num_sets'] as int,
+        setLower: row['set_lower'] as int,
+        setUpper: row['set_upper'] as int,
+        setID: row['id'] as int,
+        setOrder: row['set_order'] as int,
+        rpe: (row['rpe'] as num).toDouble(),
+      ));
+    }
+
+    // Group exercise ids by day_id, preserving order
+    final Map<int, List<int>> exIdsByDayId = {};
+    for (final row in exerciseRows) {
+      final dayId = row['day_id'] as int;
+      exIdsByDayId.putIfAbsent(dayId, () => []).add(row['id'] as int);
+    }
+
+    // Build 3D result: setList[day][exercise][set]
+    return days.map((d) {
+      final dayId = d['id'] as int;
+      final exerciseIds = exIdsByDayId[dayId] ?? [];
+      return exerciseIds.map((exId) => setsByExId[exId] ?? <PlannedSet>[]).toList();
+    }).toList();
   }
 
  
@@ -596,7 +855,7 @@ class DatabaseHelper {
   // update settings
   Future<int> updateUserSettings(UserSettings settings) async {
     final db = await database;
-    debugPrint("settings: ${settings}");
+    ////debugPrint("settings: ${settings}");
     return await db.update(
       'user_settings',
       settings.toMap(),
@@ -646,37 +905,33 @@ class DatabaseHelper {
 
 
   // for analytics pageview -- gets dates of last performed workout for each workout
+  // TODO: match on DB ID, its a bit complicated cuz we want to be able to delete days and not have foreign key errors, instead of dayTitle
   Future<List<DateTime?>> getRecentWorkoutDates(List<Day> split) async {
+    if (split.isEmpty) return [];
+
     final db = await database;
-    List<DateTime?> dates = [];
     final today = DateTime.now();
-    List<List<Map<String, Object?>>> rawDates = [];
-    // this could be a transaction but I think thats highhey overkill and silly for like 10 items
-    // TODO: match on DB ID, its a bit complicated cuz we want to be able to delete days and not have foreign key errors, instead of dayTitle
-    for (Day day in split) {
-      rawDates.add(await db.rawQuery('''
-        SELECT date
-        FROM set_log
-        WHERE day_title = ?
-        AND date BETWEEN ? AND ?
-        ORDER BY date DESC
-        LIMIT 1
-      ''', [day.dayTitle, today.subtract(const Duration(days: 7)).toIso8601String(), today.toIso8601String()]));
-    }
+    final sevenDaysAgo = today.subtract(const Duration(days: 7));
 
-    // debugPrint("raw: ${rawDates}");
+    final titles = split.map((d) => d.dayTitle).toList();
+    final placeholders = titles.map((_) => '?').join(',');
 
-    // this should maintain order, which is important since dates[i] is expected to correspond to split[i]
-    for (List<Map<String, Object?>> rawDate in rawDates){
-      if (rawDate.isEmpty){
-        // null to indicate no workout in last 7 days
-        dates.add(null);
-      } else{
-        // since we had limit 1 we will only have 1 record
-        dates.add(DateTime.tryParse(rawDate[0]['date'] as String));
-      }
-    }
-    return dates;
+    // Single query with GROUP BY instead of one query per day
+    final results = await db.rawQuery('''
+      SELECT day_title, MAX(date) as latest_date
+      FROM set_log
+      WHERE day_title IN ($placeholders)
+      AND date BETWEEN ? AND ?
+      GROUP BY day_title
+    ''', [...titles, sevenDaysAgo.toIso8601String(), today.toIso8601String()]);
+
+    final Map<String, DateTime?> dateMap = {
+      for (final row in results)
+        row['day_title'] as String: DateTime.tryParse(row['latest_date'] as String)
+    };
+
+    // Maintain index correspondence: dates[i] corresponds to split[i]
+    return split.map((d) => dateMap[d.dayTitle]).toList();
   }
 
   ////////////////////////////////////////////////////////////
@@ -710,12 +965,12 @@ class DatabaseHelper {
     for (var goalData in goalsData) {
       final exerciseId = goalData['exercise_id'] as int;
       
-      // Get most recent set
-      final recentSet = await _getMostRecentSet(exerciseId);
+      // Get the best set (highest calculated 1RM accounting for RPE) from the most recent session
+      final topSet = await _getTopSetFromMostRecentSession(exerciseId);
       
-      // Calculate 1RM
-      final currentOneRm = recentSet != null 
-          ? _calculateOneRm(recentSet['weight'], recentSet['reps'])
+      // Calculate 1RM using RPE-adjusted formula
+      final currentOneRm = topSet != null 
+          ? _calculateOneRmWithRpe(topSet['weight'], topSet['reps'], topSet['rpe'])
           : 0.0;
 
       
@@ -732,22 +987,42 @@ class DatabaseHelper {
     return goals;
   }
 
-  // Helper to get most recent set for an exercise
-  Future<Map<String, dynamic>?> _getMostRecentSet(int exerciseId) async {
+  // Helper to get the top set (highest calculated 1RM) from the most recent session
+  Future<Map<String, dynamic>?> _getTopSetFromMostRecentSession(int exerciseId) async {
     final db = await database;
-    final results = await db.query(
+    
+    // First, get the most recent session_id for this exercise
+    final recentSession = await db.query(
       'set_log',
+      columns: ['session_id'],
       where: 'exercise_id = ?',
       whereArgs: [exerciseId],
-      orderBy: 'date DESC',
+      orderBy: 'datetime(date) DESC',
       limit: 1,
     );
+    
+    if (recentSession.isEmpty) return null;
+    
+    final sessionId = recentSession.first['session_id'] as String;
+    
+    // Now get the set with the highest calculated 1RM from that session
+    final results = await db.rawQuery('''
+      SELECT weight, reps, rpe,
+             (weight * (1.0 + (reps + (10.0 - rpe)) / 30.0)) AS calculated_1rm
+      FROM set_log
+      WHERE exercise_id = ? AND session_id = ?
+      ORDER BY calculated_1rm DESC
+      LIMIT 1
+    ''', [exerciseId, sessionId]);
+    
     return results.isNotEmpty ? results.first : null;
   }
 
-  // Calculate 1RM using Epley formula
-  double _calculateOneRm(double weight, double reps) {
-    return (weight * (1 + (reps / 30)));
+  // Calculate 1RM using Epley formula with RPE adjustment
+  // Formula: weight * (1 + (reps + (10 - rpe)) / 30)
+  // This accounts for reps in reserve by adjusting reps based on RPE
+  double _calculateOneRmWithRpe(double weight, double reps, double rpe) {
+    return weight * (1 + (reps + (10 - rpe)) / 30);
   }
 
   // Update a goal
@@ -824,12 +1099,12 @@ class DatabaseHelper {
       columns: ['current_program_id', 'id'],
       limit: 1,
     );
-    debugPrint("userSettings found: ${userSettings}");
+    ////debugPrint("userSettings found: ${userSettings}");
 
     int? currentProgramId = userSettings.isNotEmpty
         ? userSettings.first['current_program_id'] as int?
         : null;
-    debugPrint("currentprogramID: ${currentProgramId}");
+    ////debugPrint("currentprogramID: ${currentProgramId}");
 
     if (currentProgramId == programId) {
       // The program to be deleted is the active program.
@@ -842,14 +1117,14 @@ class DatabaseHelper {
         whereArgs: [programId],
         limit: 1,
       );
-      debugPrint("other Program candidates: ${currentProgramId}");
+      //debugPrint("other Program candidates: ${currentProgramId}");
 
 
       if (otherPrograms.isNotEmpty) {
         // found another program: update user settings to use it.
         final int newActiveProgramId = otherPrograms.first['id'] as int;
-        debugPrint("trying to set new active program to: ${newActiveProgramId}");
-        debugPrint("with usersettings: ${userSettings.first['id']}");
+        //debugPrint("trying to set new active program to: ${newActiveProgramId}");
+        //debugPrint("with usersettings: ${userSettings.first['id']}");
         await db.update(
           'user_settings',
           {'current_program_id': newActiveProgramId},
@@ -910,7 +1185,7 @@ class DatabaseHelper {
 
   // by default, it will assign a new ID to the day.
   // but if re-adding (ie. undo a day delete), need to add with existing ID to re-link with exercises
-  Future<int> insertDay({required int programId, required String dayTitle, required int dayOrder, int? id, String gear = ''}) async {
+  Future<int> insertDay({required int programId, required String dayTitle, required int dayOrder, int? id, String gear = '', bool isTemporary = false}) async {
     final db = await DatabaseHelper.instance.database;
     return await db.insert('days', {
       if (id != null) 'id': id,
@@ -918,18 +1193,29 @@ class DatabaseHelper {
       'day_title': dayTitle,
       'day_order': dayOrder,
       'day_color': Profile.colors[dayOrder % (Profile.colors.length - 1)].value,
-      'gear' : gear,
+      'gear': gear,
+      'is_temporary': isTemporary ? 1 : 0,
     });
   }
 
-  //fetches days for given program ID, ordered by day_order
+  // fetches days for given program ID, ordered by day_order — excludes temporary days
   Future<List<Map<String, dynamic>>> fetchDays(int programId) async {
     final db = await DatabaseHelper.instance.database;
     return await db.query(
       'days',
-      where: 'program_id = ?',
+      where: 'program_id = ? AND is_temporary = 0',
       whereArgs: [programId],
       orderBy: 'day_order ASC',
+    );
+  }
+
+  // deletes any orphaned temporary days for a program (called at startup to clean up crashed sessions)
+  Future<void> deleteTemporaryDays(int programId) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.delete(
+      'days',
+      where: 'program_id = ? AND is_temporary = 1',
+      whereArgs: [programId],
     );
   }
 
@@ -1012,7 +1298,8 @@ class DatabaseHelper {
     if (result.isNotEmpty) {
       return result.first['exercise_title'] as String;
     } else {
-      throw Exception('Exercise with id $exerciseID not found');
+      // Return a default message if exercise was deleted
+      return '[Deleted Exercise]';
     }
   }
 
@@ -1050,6 +1337,20 @@ class DatabaseHelper {
         'muscles_worked' : musclesWorked
         //'exercise_id' : exercise
       });
+  }
+
+  // Delete an exercise from the exercises table
+  // Note: ON DELETE CASCADE will automatically delete related records in:
+  // - exercise_instances
+  // - set_log
+  // - goals
+  Future<int> deleteExercise(int exerciseId) async {
+    final db = await DatabaseHelper.instance.database;
+    return await db.delete(
+      'exercises',
+      where: 'id = ?',
+      whereArgs: [exerciseId],
+    );
   }
 
   // TODO: add other exercise (not instances) methods
@@ -1147,6 +1448,18 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
     );
   }
 
+  /// Deletes every set logged under [sessionID]. Used to hard-discard a cancelled
+  /// workout (#13) — sets are written to set_log immediately on each checkbox, so
+  /// without this there is no way to undo a session. Returns the rows deleted.
+  Future<int> deleteSessionRecords(String sessionID) async {
+    final db = await DatabaseHelper.instance.database;
+    return await db.delete(
+      'set_log',
+      where: 'session_id = ?',
+      whereArgs: [sessionID],
+    );
+  }
+
   // probably should use this... lol -- will be very big
   // use the pagination version that also groups by session
   Future<List<Map<String, dynamic>>> fetchAllSetRecords({required int exerciseId, int? lim}) async {
@@ -1171,7 +1484,7 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
     required int exerciseId,
     required DateTime startDate,
   }) async {
-    //debugPrint(startDate.toIso8601String());
+    ////debugPrint(startDate.toIso8601String());
 
     final db = await instance.database;
     // The query calculates the estimated 1RM for each set,
@@ -1372,7 +1685,7 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
   // this is the same as above, but is used for only one session past history for during workout quick check.
   Future<List<SetRecord>> getPreviousSessionSets(int exerciseId, String currentSessionID, {useMetric = false}) async {
     final db = await DatabaseHelper.instance.database;
-  //debugPrint("sessionID: $currentSessionID");
+  ////debugPrint("sessionID: $currentSessionID");
     final results = await db.rawQuery('''
       WITH recent_sessions_with_exercise AS (
         SELECT session_id
@@ -1451,7 +1764,7 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
       ORDER BY date, exercise_id
     ''', [DateTime(day.year, day.month, day.day).toIso8601String(), DateTime(day.year, day.month, day.day).add(const Duration(days: 1)).toIso8601String()]);
 
-    // debugPrint("raw results: ${results}");
+    // //debugPrint("raw results: ${results}");
 
     return results.map((r) => SetRecord(
       reps: r['reps'] as double,

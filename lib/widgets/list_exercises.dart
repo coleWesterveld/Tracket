@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';                                  // Hapt
 import 'package:flutter_slidable/flutter_slidable.dart';                 // Swipe To Delete
 import 'package:firstapp/providers_and_settings/program_provider.dart';  // Access Program Details
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
+import 'package:firstapp/widgets/exercise_notes_dialog.dart';
 import 'package:firstapp/widgets/list_sets.dart';
 
 class ListExercises extends StatefulWidget {
@@ -30,6 +31,99 @@ class ListExercises extends StatefulWidget {
 
 class _ListExercisesState extends State<ListExercises> {
   //final Function(int, int) onExerciseReorder;
+
+  // Superset multi-select ("Group") mode (#3)
+  bool _selectionMode = false;
+  final Set<int> _selected = <int>{};
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selected.clear();
+    });
+  }
+
+  /// Small "SS" badge shown on every exercise in a superset.
+  Widget _supersetBadge(int groupId) {
+    final color = Profile.supersetColor(groupId);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withAlpha((255 * 0.20).round()),
+        border: Border.all(color: color, width: 1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        "SS",
+        style: TextStyle(
+          color: widget.theme.colorScheme.onSurface,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSupersetActionBar(BuildContext context) {
+    final exercisesForDay = context.watch<Profile>().exercises[widget.index];
+
+    // Any already-grouped exercise in the selection means we can also ungroup.
+    final groupsSelected = _selected
+        .where((i) => i < exercisesForDay.length)
+        .map((i) => exercisesForDay[i].supersetGroup)
+        .whereType<int>()
+        .toSet();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            _selected.length < 2
+                ? "Select 2+ exercises"
+                : "${_selected.length} selected",
+            style: TextStyle(
+              color: widget.theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+
+          FilledButton(
+            onPressed: _selected.length < 2
+                ? null
+                : () async {
+                    await context
+                        .read<Profile>()
+                        .setSuperset(widget.index, _selected.toList());
+                    if (mounted) _exitSelectionMode();
+                  },
+            child: const Text("Group"),
+          ),
+
+          if (groupsSelected.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                final profile = context.read<Profile>();
+                for (final groupId in groupsSelected) {
+                  await profile.clearSuperset(widget.index, groupId);
+                }
+                if (mounted) _exitSelectionMode();
+              },
+              child: const Text("Ungroup"),
+            ),
+
+          TextButton(
+            onPressed: _exitSelectionMode,
+            child: const Text("Cancel"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ReorderableListView.builder(
@@ -51,47 +145,86 @@ class _ListExercisesState extends State<ListExercises> {
       footer: Padding(
         key: const ValueKey('exerciseAdder'),
         padding: const EdgeInsets.all(8),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: ButtonTheme(
-            minWidth: 100,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Superset grouping controls, shown while multi-selecting (#3)
+            if (_selectionMode) _buildSupersetActionBar(context),
 
-            child: TextButton.icon(
-              onPressed: () async {
-                if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
-                // callback to program page - displays fullscreen exercise search and adds the chosen exercise
-                await widget.onExerciseAdded(-1);
-              },
-            
-              style: ButtonStyle(
-                shape: WidgetStateProperty.all(
-                  RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)
-                  )
-                ),
+            Row(
+              children: [
+                ButtonTheme(
+                  minWidth: 100,
 
-                backgroundColor: WidgetStateProperty.all(
-                  widget.theme.colorScheme.primary,
-                ),
-              ),
-              
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.add,
-                    color: widget.theme.colorScheme.onPrimary,
-                  ),
-                  Text(
-                    "Exercise  ",
-                    style: TextStyle(
-                      color: widget.theme.colorScheme.onPrimary,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
+                      // callback to program page - displays fullscreen exercise search and adds the chosen exercise
+                      await widget.onExerciseAdded(-1);
+                    },
+
+                    style: ButtonStyle(
+                      shape: WidgetStateProperty.all(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)
+                        )
+                      ),
+
+                      backgroundColor: WidgetStateProperty.all(
+                        widget.theme.colorScheme.primary,
+                      ),
+                    ),
+
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add,
+                          color: widget.theme.colorScheme.onPrimary,
+                        ),
+                        Text(
+                          "Exercise  ",
+                          style: TextStyle(
+                            color: widget.theme.colorScheme.onPrimary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+
+                const SizedBox(width: 8),
+
+                // Entry point for superset grouping — needs 2+ exercises to group.
+                if (!_selectionMode &&
+                    context.watch<Profile>().exercises[widget.index].length >= 2)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
+                      setState(() {
+                        _selectionMode = true;
+                        _selected.clear();
+                      });
+                    },
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: BorderSide(color: widget.theme.colorScheme.outline),
+                    ),
+                    icon: Icon(
+                      Icons.link,
+                      size: 18,
+                      color: widget.theme.colorScheme.onSurface,
+                    ),
+                    label: Text(
+                      "Superset",
+                      style: TextStyle(color: widget.theme.colorScheme.onSurface),
+                    ),
+                  ),
+              ],
             ),
-          ),
+          ],
         ),
       ),
 
@@ -101,6 +234,11 @@ class _ListExercisesState extends State<ListExercises> {
 
       // Displaying list of exercises for that day
       itemBuilder: (context, exerciseIndex) {
+        final int? supersetGroup = context
+            .watch<Profile>()
+            .exercises[widget.index][exerciseIndex]
+            .supersetGroup;
+
         // Dismissable by swipe
         return Slidable(
           closeOnScroll: true,
@@ -147,7 +285,7 @@ class _ListExercisesState extends State<ListExercises> {
                               );
                             });
                           } catch(e){
-                            debugPrint('Undo failed: $e');
+                            //debugPrint('Undo failed: $e');
 
                             // Show error message
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -165,13 +303,21 @@ class _ListExercisesState extends State<ListExercises> {
 
           // Box containing one exercise and its sets
           child: Container(
-            // Outline to make dividers 
+            // Outline to make dividers
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
                   color: widget.theme.colorScheme.outline,
                   width: 0.5
                 ),
+                // Colored left-edge bracket marking a superset group (#3).
+                // Grouped by id, so members don't have to be adjacent.
+                left: supersetGroup != null
+                    ? BorderSide(
+                        color: Profile.supersetColor(supersetGroup),
+                        width: 4,
+                      )
+                    : BorderSide.none,
               ),
             ),
 
@@ -184,22 +330,50 @@ class _ListExercisesState extends State<ListExercises> {
                     // Top title of exercise and set add button and edit button
                     Row(
                       children: [
+                        // Multi-select checkbox, only while grouping a superset (#3)
+                        if (_selectionMode)
+                          Checkbox(
+                            value: _selected.contains(exerciseIndex),
+                            onChanged: (checked) {
+                              setState(() {
+                                if (checked == true) {
+                                  _selected.add(exerciseIndex);
+                                } else {
+                                  _selected.remove(exerciseIndex);
+                                }
+                              });
+                            },
+                          ),
+
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              context.watch<Profile>().exercises[widget.index][exerciseIndex].exerciseTitle,
-                                                                
-                              style: TextStyle(
-                                color: widget.theme.colorScheme.onSurface,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    context.watch<Profile>().exercises[widget.index][exerciseIndex].exerciseTitle,
+
+                                    style: TextStyle(
+                                      color: widget.theme.colorScheme.onSurface,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                if (supersetGroup != null) ...[
+                                  const SizedBox(width: 6),
+                                  _supersetBadge(supersetGroup),
+                                ],
+                              ],
                             ),
                           ),
                         ),
-        
-                        // Add set button 
+
+                        // The per-exercise actions just get in the way while
+                        // multi-selecting, so hide them in selection mode.
+                        if (!_selectionMode)
+                        // Add set button
                         Align(
                           key: const ValueKey('setAdder'),
                           alignment: Alignment.centerLeft,
@@ -232,20 +406,42 @@ class _ListExercisesState extends State<ListExercises> {
                                 ),
                               ),
                           
-                              onPressed: () {
+                              onPressed: () async {
                                 if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
-                              
-                                context.read<Profile>().setsAppend(
-                                  index1: widget.index,
-                                  index2: exerciseIndex,
+
+                                final profile = context.read<Profile>();
+
+                                // Prefill the new set with this exercise's last target,
+                                // else the last target touched anywhere (#10).
+                                final prefill = profile.prefillTargetFor(
+                                  widget.index,
+                                  exerciseIndex,
                                 );
 
-                                context.read<Profile>().editIndex = [
-                                  widget.index, 
-                                  exerciseIndex, 
-                                  context.read<Profile>().sets[widget.index][exerciseIndex].length
+                                final bool ok = await profile.setsAppend(
+                                  index1: widget.index,
+                                  index2: exerciseIndex,
+                                  setLower: prefill.setLower,
+                                  setUpper: prefill.setUpper,
+                                  rpe: prefill.rpe,
+                                );
+
+                                if (!context.mounted) return;
+                                if (!ok) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Couldn't add set, please try again.")),
+                                  );
+                                  return;
+                                }
+
+                                // Open the newly added set for editing. NOTE: we await
+                                // the append now, so the list has already grown — the
+                                // new set is at length - 1.
+                                profile.editIndex = [
+                                  widget.index,
+                                  exerciseIndex,
+                                  profile.sets[widget.index][exerciseIndex].length - 1
                                 ];
-                              
                               },
 
                               label: Row(
@@ -267,14 +463,39 @@ class _ListExercisesState extends State<ListExercises> {
                           ),
                         ),
                   
+                        // Persistent notes button — same editor the workout page uses,
+                        // so notes can be written while building a program (#11).
+                        if (!_selectionMode)
+                        IconButton(
+                          onPressed: () {
+                            if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
+                            showExerciseNotesDialog(
+                              context,
+                              theme: widget.theme,
+                              primaryIndex: widget.index,
+                              index: exerciseIndex,
+                            );
+                          },
+                          icon: Icon(
+                            context.watch<Profile>().exercises[widget.index][exerciseIndex].notes.isEmpty
+                                ? Icons.edit_note_outlined
+                                : Icons.edit_note,
+                          ),
+                          tooltip: 'Persistent notes',
+                          color: context.watch<Profile>().exercises[widget.index][exerciseIndex].notes.isEmpty
+                              ? widget.theme.colorScheme.onSurface
+                              : widget.theme.colorScheme.primary,
+                        ),
+
                         // Confirm update button
+                        if (!_selectionMode)
                         IconButton(
                           // TODO: here we need to use the new exercise selector
                           onPressed: () async {
                             if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
                             widget.onExerciseAdded(exerciseIndex);
-                          }, 
-                        
+                          },
+
                           icon: const Icon(Icons.edit),
                           color: widget.theme.colorScheme.onSurface,
                         ),

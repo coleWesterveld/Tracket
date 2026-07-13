@@ -103,7 +103,7 @@ class UserSettings {
       enableSound: (map['enable_sound'] as int? ?? 1) == 1,
       enableHaptics: (map['enable_haptics'] as int? ?? 1) == 1,
       autoRestTimer: (map['auto_rest_timer'] as int? ?? 0) == 1,
-      colourBlindMode: (map['colourBlindMode'] as int? ?? 0) == 1,
+      colourBlindMode: (map['colour_blind_mode'] as int? ?? 0) == 1,
       enableNotifications: (map['enable_notifications'] as int? ?? 0) == 1,
       timeReminder: map['time_reminder'] as int? ?? 30,
       isFirstTime:(map['is_first_time'] as int? ?? 0) == 1,
@@ -220,15 +220,17 @@ class Day {
   final int dayColor;
   TimeOfDay? workoutTime;
   int dayOrder;
+  final bool isTemporary;
 
   Day({
-    required this.dayID, 
-    required this.dayTitle, 
-    required this.programID, 
-    required this.dayColor, 
+    required this.dayID,
+    required this.dayTitle,
+    required this.programID,
+    required this.dayColor,
     required this.dayOrder,
     this.workoutTime,
-    this.gear = ''
+    this.gear = '',
+    this.isTemporary = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -239,7 +241,8 @@ class Day {
       'day_color': dayColor,
       'day_order': dayOrder,
       'workout_time': workoutTime != null ? timeOfDayToString(workoutTime!) : null,
-      'gear' : gear
+      'gear' : gear,
+      'is_temporary': isTemporary ? 1 : 0,
     };
   }
 
@@ -250,27 +253,29 @@ class Day {
       dayTitle: map['day_title'],
       programID: map['program_id'],
       dayOrder: map['day_order'],
-      workoutTime: map['workout_time'] != null 
-        ? stringToTimeOfDay(map['workout_time']) 
+      workoutTime: map['workout_time'] != null
+        ? stringToTimeOfDay(map['workout_time'])
         : null,
-      gear: map['gear']
+      gear: map['gear'],
+      isTemporary: (map['is_temporary'] as int? ?? 0) == 1,
     );
   }
 
   @override
   String toString() {
-    return 'Day{time: $workoutTime title: $dayTitle, id: $dayID, prgmID: $programID, order: $dayOrder}';
+    return 'Day{time: $workoutTime title: $dayTitle, id: $dayID, prgmID: $programID, order: $dayOrder, isTemporary: $isTemporary}';
   }
 
 
   Day copyWith({
-    int? newDayColor, 
-    int? newDayID, 
-    String? newDayTitle, 
-    int? newProgramID, 
+    int? newDayColor,
+    int? newDayID,
+    String? newDayTitle,
+    int? newProgramID,
     int? newDayOrder,
     TimeOfDay? newTime,
     String? newGear,
+    bool? newIsTemporary,
     }) {
     return Day(
       dayOrder: newDayOrder ?? dayOrder,
@@ -279,7 +284,8 @@ class Day {
       dayTitle: newDayTitle ?? dayTitle,
       programID: newProgramID ?? programID,
       workoutTime: newTime ?? workoutTime,
-      gear: newGear ?? gear
+      gear: newGear ?? gear,
+      isTemporary: newIsTemporary ?? isTemporary,
     );
   }
 }
@@ -294,15 +300,20 @@ class Exercise {
   final int dayID;
   final String exerciseTitle;
   final int exerciseOrder;
-
+  // Supersets (#3): exercises on the same day sharing a non-null supersetGroup are
+  // one superset. The group id is just the `id` of the first exercise grouped, so
+  // no counter table is needed. Null = not in a superset. Grouping is by id, NOT
+  // by adjacency, so reordering can't silently break a group.
+  final int? supersetGroup;
 
   Exercise({
     required this.id,
-    required this.exerciseID, 
-    required this.dayID, 
-    required this.exerciseTitle, 
+    required this.exerciseID,
+    required this.dayID,
+    required this.exerciseTitle,
     required this.exerciseOrder,
-    this.notes = ''
+    this.notes = '',
+    this.supersetGroup,
   });
 
   Map<String, dynamic> toMap() {
@@ -312,7 +323,8 @@ class Exercise {
       'day_id': dayID,
       'exercise_title': exerciseTitle,
       'exercise_order': exerciseOrder,
-      'notes': notes
+      'notes': notes,
+      'superset_group': supersetGroup,
     };
   }
 
@@ -323,7 +335,8 @@ class Exercise {
       dayID: map['day_id'],
       exerciseTitle: map['exercise_title'],
       exerciseOrder: map['exercise_order'],
-      notes: map['notes']
+      notes: map['notes'],
+      supersetGroup: map['superset_group'] as int?,
     );
   }
   @override
@@ -332,12 +345,15 @@ class Exercise {
   }
 
   Exercise copyWith({
-    int? newDayID, 
-    int? newexerciseID, 
-    String? newexerciseTitle, 
-    int? newexerciseOrder, 
+    int? newDayID,
+    int? newexerciseID,
+    String? newexerciseTitle,
+    int? newexerciseOrder,
     int? newID,
-    String? newNotes
+    String? newNotes,
+    // nullable field -> needs an explicit "clear" flag, since `null` means "keep"
+    int? newSupersetGroup,
+    bool clearSupersetGroup = false,
   }) {
     return Exercise(
       id: newID ?? id,
@@ -345,7 +361,8 @@ class Exercise {
       dayID: newDayID ?? dayID,
       exerciseTitle: newexerciseTitle ?? exerciseTitle,
       exerciseOrder: newexerciseOrder ?? exerciseOrder,
-      notes: newNotes ?? notes
+      notes: newNotes ?? notes,
+      supersetGroup: clearSupersetGroup ? null : (newSupersetGroup ?? supersetGroup),
     );
   }
 }

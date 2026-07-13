@@ -1,19 +1,17 @@
-import 'package:firstapp/other_utilities/format_weekday.dart';
 import 'package:firstapp/other_utilities/keyboard_config.dart';
 import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
+import 'package:firstapp/widgets/exercise_notes_dialog.dart';
 import 'package:firstapp/widgets/exercise_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers_and_settings/program_provider.dart';
 import '../widgets/set_logging.dart';
-import '../other_utilities/lightness.dart';
 import 'dart:async';
 import '../database/database_helper.dart';
 import '../database/profile.dart';
-import 'package:intl/intl.dart';
 import '../providers_and_settings/settings_page.dart';
 import 'package:firstapp/widgets/history_session_view.dart';
 import 'package:keyboard_actions/keyboard_actions.dart';
@@ -49,7 +47,7 @@ class _WorkoutState extends State<Workout> {
 
   final Map<int, List<SetRecord>> _exerciseHistory = {};
 
-  void _preloadHistory() async {
+  Future<void> _preloadHistory() async {
     final dbHelper = DatabaseHelper.instance;
     int index = 0;
 
@@ -61,26 +59,26 @@ class _WorkoutState extends State<Workout> {
       for (Exercise exercise
           in context.read<Profile>().exercises[primaryIndex]) {
 
-        //debugPrint("exercises: ${exercise.exerciseTitle} : ${exercise.exerciseID}");
+        ////debugPrint("exercises: ${exercise.exerciseTitle} : ${exercise.exerciseID}");
         final record = await dbHelper.getPreviousSessionSets(
           exercise.exerciseID, 
           workoutProvider.sessionID!,
         );
-        //debugPrint("record found for exercise: ${record}");
+        ////debugPrint("record found for exercise: ${record}");
         if (record.isNotEmpty) {
           _exerciseHistory[index] = record;
-          // debugPrint("index: ${index}");
-          // debugPrint("record for ID: ${exercise.exerciseID}");
-          // debugPrint("record saved: ${_exerciseHistory[index]}");
+          // //debugPrint("index: ${index}");
+          // //debugPrint("record for ID: ${exercise.exerciseID}");
+          // //debugPrint("record saved: ${_exerciseHistory[index]}");
 
         }
         index++;
       }
     }else{
-      debugPrint("Primary index is null.");
+      //debugPrint("Primary index is null.");
     }
 
-    //debugPrint("History: ${_exerciseHistory}");
+    ////debugPrint("History: ${_exerciseHistory}");
   }
 
   @override
@@ -93,6 +91,25 @@ class _WorkoutState extends State<Workout> {
   void initState() {
     super.initState();
     _preloadHistory();
+
+    // Expand the first exercise tile once after the first frame instead of
+    // relying purely on initiallyExpanded/expansionStates timing, which could
+    // land mid ExpansionTile animation and leave the body ClipRect-clipped (#1).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final awp = context.read<ActiveWorkoutProvider>();
+      if (awp.workoutExpansionControllers.isNotEmpty) {
+        final controller = awp.workoutExpansionControllers[0];
+        try {
+          if (!controller.isExpanded) {
+            controller.expand();
+            awp.expansionStates[0] = true;
+          }
+        } catch (_) {
+          // Controller not attached yet — safe to ignore.
+        }
+      }
+    });
   }
 
   @override
@@ -101,16 +118,34 @@ class _WorkoutState extends State<Workout> {
     super.dispose();
   }
 
-  void _handleExerciseSelected(Map<String, dynamic> exercise){
+  void _handleExerciseSelected(Map<String, dynamic> exercise) async {
     final activeDayIndex = context.read<ActiveWorkoutProvider>().activeDayIndex;
-    
-    context.read<Profile>().exerciseAppend(
-      index: activeDayIndex!,
+    if (activeDayIndex == null) return;
+
+    // Await the append BEFORE sizing controllers so the in-memory lists and the
+    // parallel controller arrays stay in lockstep (otherwise -> RangeError when
+    // exerciseBuild indexes the new last item).
+    final bool ok = await context.read<Profile>().exerciseAppend(
+      index: activeDayIndex,
       exerciseId: exercise['exercise_id'],
     );
-    
+
+    if (!mounted) return;
+
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't add exercise, please try again.")),
+      );
+      return;
+    }
+
     // Sync controllers to include the new exercise
     context.read<ActiveWorkoutProvider>().syncControllersForDay(activeDayIndex);
+
+    // Fetch history for the newly-added exercise so its previous weights/reps
+    // show immediately without leaving and rejoining the workout (#5).
+    await _preloadHistory();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -187,7 +222,9 @@ class _WorkoutState extends State<Workout> {
 
   Widget exerciseBuild(BuildContext context, int index) {
     int? primaryIndex = context.read<ActiveWorkoutProvider>().activeDayIndex;
-    bool isNextSet = index == context.watch<ActiveWorkoutProvider>().nextSet[0];
+    // read (not watch): nextSet changes only via log actions that already call
+    // setState in this State, so this card must NOT rebuild on the 1 Hz tick (RC#2).
+    bool isNextSet = index == context.read<ActiveWorkoutProvider>().nextSet[0];
 
     final double screenWidth = MediaQuery.sizeOf(context).width;
     final bool smallScreen = screenWidth < 405;
@@ -207,7 +244,7 @@ class _WorkoutState extends State<Workout> {
             child: TextButton.icon(
               
               onPressed: () async {
-                debugPrint("allo? ");
+                //debugPrint("allo? ");
                 if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
                 context.read<UiStateProvider>().isChoosingExercise = true;
                 setState(() {});
@@ -248,6 +285,10 @@ class _WorkoutState extends State<Workout> {
       );
     }
 
+    // Superset membership for this exercise (#3) — grouped by id, not adjacency
+    final int? supersetGroup =
+        context.watch<Profile>().exercises[primaryIndex][index].supersetGroup;
+
     return Padding(
       key: ValueKey(context.watch<Profile>().exercises[primaryIndex][index]),
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4),
@@ -259,12 +300,28 @@ class _WorkoutState extends State<Workout> {
                 ? widget.theme.colorScheme.primary
                 : widget.theme.colorScheme.outline,
           ),
-          color: context.watch<ActiveWorkoutProvider>().isExerciseComplete[index] 
-            ? widget.theme.colorScheme.primary.withAlpha((255 * 0.25).round()) 
+          color: context.read<ActiveWorkoutProvider>().isExerciseComplete[index]
+            ? widget.theme.colorScheme.primary.withAlpha((255 * 0.25).round())
             :widget.theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12.0),
         ),
-        child: Theme(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12.0),
+          child: Stack(
+            children: [
+              // Shared colored left-edge bracket for supersets (#3)
+              if (supersetGroup != null)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 4,
+                  child: Container(color: Profile.supersetColor(supersetGroup)),
+                ),
+
+              Padding(
+                padding: EdgeInsets.only(left: supersetGroup != null ? 4 : 0),
+                child: Theme(
           data: Theme.of(context).copyWith(
             dividerColor: Colors.transparent,
             listTileTheme: const ListTileThemeData(
@@ -286,18 +343,49 @@ class _WorkoutState extends State<Workout> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Text(
-                      context
-                          .watch<Profile>()
-                          .exercises[primaryIndex][index]
-                          .exerciseTitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: widget.theme.colorScheme.onSurface,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            context
+                                .watch<Profile>()
+                                .exercises[primaryIndex][index]
+                                .exerciseTitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: widget.theme.colorScheme.onSurface,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        // "SS" badge — reminder that this exercise is supersetted (#3)
+                        if (supersetGroup != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Profile.supersetColor(supersetGroup)
+                                  .withAlpha((255 * 0.20).round()),
+                              border: Border.all(
+                                color: Profile.supersetColor(supersetGroup),
+                                width: 1,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              "SS",
+                              style: TextStyle(
+                                color: widget.theme.colorScheme.onSurface,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -315,14 +403,14 @@ class _WorkoutState extends State<Workout> {
                     });
                   },
                   icon: Icon(
-                    context.watch<ActiveWorkoutProvider>().showHistory![index]
+                    context.read<ActiveWorkoutProvider>().showHistory![index]
                         ? Icons.swap_horiz
                         : Icons.info_outline,
                   ),
                 ),
               ],
             ),
-            children: context.watch<ActiveWorkoutProvider>().showHistory![index]
+            children: context.read<ActiveWorkoutProvider>().showHistory![index]
                 ? [
                     Padding(
                         padding: const EdgeInsets.all(8.0),
@@ -511,7 +599,7 @@ class _WorkoutState extends State<Workout> {
                                         recordID: context.read<Profile>().sets[primaryIndex][index][setIndex].loggedRecordID[subSetIndex]!
                                       );
                                     } else{
-                                      debugPrint("Cannot unlog set by referencing a null ID");
+                                      //debugPrint("Cannot unlog set by referencing a null ID");
                                     }
                                     // unlog this set
                                   }
@@ -547,24 +635,10 @@ class _WorkoutState extends State<Workout> {
                                       }
                                     }
 
-                                    // just learned you can label loops to break out fully. The more you know.
-                                    // Improved all-logged check
-                                    
-                                    bool allLogged = true;
-
-                                    // if no set in the exercise is yet to be logged, we mark the exercise as entirely logged and complete
-                                    outerLoop: // Label for the outer loop
-                                    for (final workoutSet in context.read<Profile>().sets[primaryIndex][index]) {
-                                      for (int j = 0; j < workoutSet.loggedRecordID.length; j++) {
-                                        if ((workoutSet.loggedRecordID[j] == null)) {
-                                          allLogged = false;
-                                          break outerLoop; // Break both loops immediately
-                                        }
-                                      }
-                                    }
-
-                                    // Update exercise completion status
-                                    context.read<ActiveWorkoutProvider>().isExerciseComplete[index] = allLogged;
+                                    // Single source of truth: recompute completion
+                                    // for every exercise from the logged records,
+                                    // rather than duplicating the all-logged loop here (#9).
+                                    context.read<ActiveWorkoutProvider>().recalculateCompletion();
                                   });
                                 },
                               );
@@ -602,15 +676,28 @@ class _WorkoutState extends State<Workout> {
                                   borderRadius:
                                       const BorderRadius.all(Radius.circular(8))),
                             ),
-                            onPressed: () {
-                              context.read<Profile>().setsAppend(
+                            onPressed: () async {
+                              // Await BEFORE syncing controllers so arrays stay in
+                              // lockstep with the in-memory sets list (RC#1).
+                              final bool ok = await context.read<Profile>().setsAppend(
                                     index1: primaryIndex,
                                     index2: index,
+                                    setLower: 5,
+                                    setUpper: 12,
+                                    rpe: 9,
                                   );
-                              
+
+                              if (!mounted) return;
+                              if (!ok) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Couldn't add set, please try again.")),
+                                );
+                                return;
+                              }
+
                               // Sync controllers to include the new set
                               context.read<ActiveWorkoutProvider>().syncControllersForDay(primaryIndex);
-                              
+
                               context.read<ActiveWorkoutProvider>().isExerciseComplete[index] = false;
                               setState(() {});
                             },
@@ -691,130 +778,31 @@ class _WorkoutState extends State<Workout> {
                               hintText: "Notes: ",
                             ),
                           
-                            controller: context.watch<ActiveWorkoutProvider>().workoutNotesTEC[index],
-                          
+                            controller: context.read<ActiveWorkoutProvider>().workoutNotesTEC[index],
+
                           ),
                         ),
                       ),
                     ),
                   ],
-          ),
-        ),
-      ),
+                ),      // ExpansionTile
+              ),        // Theme
+            ),          // Padding (offsets content past the superset bracket)
+          ],            // Stack children
+        ),              // Stack
+      ),                // ClipRRect
+      ),                // Container
     );
   }
 
-  Future<dynamic> _updatePersistentNotes(BuildContext context, int primaryIndex, int index) {
-    return showDialog(
-      context: context, 
-      builder: (context) {
-        final persistentNotesTEC = TextEditingController(
-          text: context.read<Profile>().exercises[primaryIndex][index].notes
-        );
-
-        return AlertDialog(
-          title: Text(
-            "Enter notes for ${context.read<Profile>().exercises[primaryIndex][index].exerciseTitle} for this program",
-            style: TextStyle(
-              fontSize: 18
-            )
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              
-              TextField(
-                controller: persistentNotesTEC,
-                minLines: 2,
-                maxLines: 4,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  labelText: "Persistent Notes",
-                  border: OutlineInputBorder(),
-                  hintText: "Machine settings, form cues, reminders..."
-
-                ),
-                autofocus: true,
-
-                onSubmitted: (value) {
-                  context.read<Profile>().updateExerciseNotes(primaryIndex, index, value);
-                },
-                
-              ),
-              
-            ],
-          ),
-          actions: [
-            SizedBox(
-              height: 45,
-              width: 72,
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                style: ButtonStyle(
-              
-                  shape: WidgetStateProperty.all(
-                    RoundedRectangleBorder(
-                      side: BorderSide(
-                        width: 2,
-                        color: widget.theme.colorScheme.primary,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  overlayColor: WidgetStateProperty.resolveWith<Color?>(
-                    (states) {
-                      if (states.contains(WidgetState.pressed)) return widget.theme.colorScheme.primary;
-                      return null;
-                    },
-                  ),
-                ),
-                child: Text(
-                  "Cancel",
-                  style: TextStyle(
-                    color: widget.theme.colorScheme.primary,
-                  ),
-                ),
-              ),
-            ),
-
-            SizedBox(
-              width: 72,
-              height: 45,
-              child: TextButton(
-                onPressed: () {
-                  context.read<Profile>().updateExerciseNotes(primaryIndex, index, persistentNotesTEC.text);
-                  
-                  Navigator.pop(context);
-                },
-              
-                style: ButtonStyle(
-                  shape: WidgetStateProperty.all(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)
-                    )
-                  ),
-              
-                  backgroundColor: WidgetStateProperty.all(
-                    widget.theme.colorScheme.primary,
-                  ), 
-              
-                  overlayColor: WidgetStateProperty.resolveWith<Color?>((states) {
-                    if (states.contains(WidgetState.pressed)) return widget.theme.colorScheme.primary;
-                    return null;
-                  }),
-                ),
-              
-                child: Text(
-                  "Save",
-                  style: TextStyle(
-                    color: widget.theme.colorScheme.onPrimary,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+  // The notes editor now lives in widgets/exercise_notes_dialog.dart so the program
+  // page can open the exact same editor while building a program (#11).
+  Future<void> _updatePersistentNotes(BuildContext context, int primaryIndex, int index) {
+    return showExerciseNotesDialog(
+      context,
+      theme: widget.theme,
+      primaryIndex: primaryIndex,
+      index: index,
     );
   }
 
@@ -839,7 +827,7 @@ class _WorkoutState extends State<Workout> {
         builder: (context) => _buildHistoryBottomSheet(records, exerciseTitle),
       );
     } catch (e) {
-      debugPrint("Error fetching history: $e");
+      //debugPrint("Error fetching history: $e");
       if (!mounted) return;
 
       Navigator.of(context).pop();
@@ -868,7 +856,7 @@ class _WorkoutState extends State<Workout> {
             children: [
               Text("No History Found",
                   style: Theme.of(context).textTheme.titleLarge),
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
               Text("No recorded sets found for $title"),
             ],
           ),

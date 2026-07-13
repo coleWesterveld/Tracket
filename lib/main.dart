@@ -1,5 +1,4 @@
 import 'package:firstapp/app_tutorial/app_tutorial_keys.dart';
-import 'package:firstapp/other_utilities/lightness.dart';
 import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
 import 'package:firstapp/providers_and_settings/snapshot_active_workout.dart';
 import 'package:flutter/material.dart';
@@ -58,7 +57,7 @@ void main() async {
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   // assert(() {
-  //   debugPrintGlobalKeyedWidgetLifecycle = true;
+  //   //debugPrintGlobalKeyedWidgetLifecycle = true;
   //   return true;
   // }());
 
@@ -149,9 +148,28 @@ class _MainPage extends State<GymApp>{
 
           update: (context, programProvider, previousActiveWorkoutProvider) {
             if (previousActiveWorkoutProvider?.activeDayIndex != null){
-            previousActiveWorkoutProvider!
-            ..programProvider = programProvider
-            ..syncControllersForDay(previousActiveWorkoutProvider.activeDayIndex!);
+              final programChanged = previousActiveWorkoutProvider!.activeProgramId != null &&
+                  previousActiveWorkoutProvider.activeProgramId != programProvider.currentProgram.programID;
+
+              if (programChanged) {
+                // Program switched while workout was active — clear the workout
+                ////debugPrint("Active workout cleared: program switched");
+                previousActiveWorkoutProvider
+                ..programProvider = programProvider
+                ..setActiveDayAndStartNew(null);
+              } else if (previousActiveWorkoutProvider.activeDayIndex! < programProvider.split.length &&
+                  previousActiveWorkoutProvider.activeDayIndex! < programProvider.exercises.length &&
+                  previousActiveWorkoutProvider.activeDayIndex! < programProvider.sets.length) {
+                previousActiveWorkoutProvider
+                ..programProvider = programProvider
+                ..syncControllersForDay(previousActiveWorkoutProvider.activeDayIndex!);
+              } else {
+                // Active workout day index is no longer valid
+                ////debugPrint("Active workout cleared: day index out of bounds for new program");
+                previousActiveWorkoutProvider
+                ..programProvider = programProvider
+                ..setActiveDayAndStartNew(null);
+              }
             }
 
             return previousActiveWorkoutProvider ?? ActiveWorkoutProvider(
@@ -175,17 +193,19 @@ class _MainPage extends State<GymApp>{
           }
           
           if (
-            !context.read<UiStateProvider>().hasSetNotifs 
-            && !settings.isFirstTime 
+            !context.read<UiStateProvider>().hasSetNotifs
+            && !settings.isFirstTime
             && context.watch<Profile>().isInitialized
             && context.read<SettingsModel>().notificationsEnabled
           ) {
-            final notiService = NotiService();
-            notiService.scheduleWorkoutNotifications(
-              profile: context.read<Profile>(),
-              settings: context.read<SettingsModel>(),
-            );
-            context.read<UiStateProvider>().hasSetNotifs = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final notiService = NotiService();
+              notiService.scheduleWorkoutNotifications(
+                profile: context.read<Profile>(),
+                settings: context.read<SettingsModel>(),
+              );
+              context.read<UiStateProvider>().hasSetNotifs = true;
+            });
           }
 
           Widget initialHome;
@@ -335,7 +355,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
     // if called during build or initState/didChangeDependencies.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) { // Check if the state is still mounted
-          //debugPrint("🏠 Opening drawer from MainScaffoldState due to request");
+          ////debugPrint("🏠 Opening drawer from MainScaffoldState due to request");
           _scaffoldKey.currentState?.openDrawer();
       }
     });
@@ -346,7 +366,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
   // String notifications = "";
 
   void openProgramDrawer() {
-      //debugPrint("🏠 openProgramDrawer() called");
+      ////debugPrint("🏠 openProgramDrawer() called");
 
     // Use the context from the State object which is a descendant of the Scaffold
     _scaffoldKey.currentState?.openDrawer();
@@ -373,7 +393,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
               .startTutorialSequence(widget.showcaseContext); // Use the passed context
         } else {
           // Not first time, attempt to resume workout
-          //debugPrint("attempting resume");
+          ////debugPrint("attempting resume");
           _initiateResumeAttempt();
         }
       }
@@ -387,23 +407,23 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
 
     // Wait for Profile provider to be fully initialized
     if (!profileP.isInitialized) {
-      debugPrint("MainScaffold: Profile not yet initialized. Awaiting initialization...");
+      ////debugPrint("MainScaffold: Profile not yet initialized. Awaiting initialization...");
       try {
         await profileP.initializationDone;
-        debugPrint("MainScaffold: Profile initialization complete. Proceeding with resume check.");
+        ////debugPrint("MainScaffold: Profile initialization complete. Proceeding with resume check.");
       } catch (e) {
-        debugPrint("MainScaffold: Profile initialization failed during await: $e. Aborting resume.");
+        ////debugPrint("MainScaffold: Profile initialization failed during await: $e. Aborting resume.");
         return;
       }
     }
 
     ActiveWorkoutSnapshot? snapshot = await activeWorkoutP.loadActiveWorkoutState();
-    //debugPrint("we got a snapshot: $snapshot");
+    ////debugPrint("we got a snapshot: $snapshot");
     // widget.debugtext = snapshot?.toJson().toString() ?? "this was null";
 
 
     if (snapshot != null) {
-      //debugPrint("MainScaffold: Snapshot found for session ${snapshot.sessionID}. Attempting to auto-resume.");
+      ////debugPrint("MainScaffold: Snapshot found for session ${snapshot.sessionID}. Attempting to auto-resume.");
 
       // Ensure Profile is set to the correct day context if necessary.
       // For now, assuming ActiveWorkoutProvider uses Profile's currently loaded data.
@@ -414,7 +434,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
 
       bool structuresPrepared = activeWorkoutP.prepareStructuresForRestoredDay(snapshot.activeDayIndex);
       if (!structuresPrepared) {
-          debugPrint("MainScaffold: Failed to prepare AWP structures for day ${snapshot.activeDayIndex}. Clearing snapshot.");
+          ////debugPrint("MainScaffold: Failed to prepare AWP structures for day ${snapshot.activeDayIndex}. Clearing snapshot.");
           await activeWorkoutP.clearActiveWorkoutState();
           return;
       }
@@ -422,7 +442,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
       bool restored = await activeWorkoutP.restoreFromSnapshot(snapshot);
 
       if (restored && mounted) {
-        //debugPrint("MainScaffold: Workout session resumed. UI should react.");
+        ////debugPrint("MainScaffold: Workout session resumed. UI should react.");
         // NO explicit navigation here from MainScaffold.
         // The UI (e.g., WorkoutSelectionPage or the initial page in your NavigationBar)
         // should watch ActiveWorkoutProvider.sessionID. If it becomes non-null
@@ -430,11 +450,11 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
         // This keeps MainScaffold decoupled from direct Workout page navigation.
         // Example: WorkoutSelectionPage's initState or build method checks and navigates.
       } else if (!restored) {
-        debugPrint("MainScaffold: Failed to restore snapshot. Clearing snapshot.");
+        ////debugPrint("MainScaffold: Failed to restore snapshot. Clearing snapshot.");
         await activeWorkoutP.clearActiveWorkoutState();
       }
     } else {
-      //debugPrint("MainScaffold: No snapshot found to resume.");
+      ////debugPrint("MainScaffold: No snapshot found to resume.");
     }
   }
 
@@ -443,7 +463,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
     
     final uiState = context.watch<UiStateProvider>();
     final manager = context.watch<TutorialManager>();
-    //debugPrint("${manager.tutorialActive}");
+    ////debugPrint("${manager.tutorialActive}");
 
 
     final ThemeData theme = Theme.of(context);
@@ -458,7 +478,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
         appBar: _buildAppBar(context),
         // floatingActionButton: TextButton(
         //   onPressed: () async {
-        //     NotiService().debugPrintScheduledNotifications();
+        //     NotiService().//debugPrintScheduledNotifications();
         //   }, 
         //   child: const Text("see notifs")
         // ),
@@ -475,25 +495,18 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
       
       
         resizeToAvoidBottomInset: true,
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            border: Border(
-              top:(context.watch<ActiveWorkoutProvider>().activeDay == null 
-              && context.watch<UiStateProvider>().currentPageIndex != 2)
-              ? BorderSide(
-                color: theme.colorScheme.outline,
-                width: 0.5,
-              ) 
-              : BorderSide.none,
-            ),
-          ),
+        bottomNavigationBar: Selector<ActiveWorkoutProvider, bool>(
+          // Only rebuild the nav bar border when a workout starts/ends, NOT on
+          // the 1 Hz stopwatch tick (RC#2). Previously a context.watch here
+          // rebuilt the ENTIRE root Scaffold (all IndexedStack pages) every second.
+          selector: (_, awp) => awp.activeDay == null,
           child: NavigationBar(
             onDestinationSelected: (int index) {
               // reset bottombar and variables in this niche case
               if (uiState.currentPageIndex == 3 && uiState.isDisplayingChart) {
                 uiState.onAppBarBackButtonPress!();
               }
-              
+
               uiState.currentPageIndex = index;
             },
             shadowColor: Colors.black,
@@ -504,7 +517,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
               ),
             ),
 
-                
+
             selectedIndex: uiState.currentPageIndex,
             //different pages that can be navigated to
             destinations: const <Widget>[
@@ -530,25 +543,46 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
               ),
             ],
           ),
+          builder: (context, noActiveWorkout, child) {
+            return Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  top: (noActiveWorkout && uiState.currentPageIndex != 2)
+                    ? BorderSide(
+                      color: theme.colorScheme.outline,
+                      width: 0.5,
+                    )
+                    : BorderSide.none,
+                ),
+              ),
+              child: child,
+            );
+          },
         ),
         //what opens for each page
-        body: Consumer<ActiveWorkoutProvider>(
-          builder: (context, activeWorkout, child) {
+        body: Selector<ActiveWorkoutProvider, bool>(
+          // Rebuild the body margin only when a workout starts/ends, NOT on the
+          // 1 Hz tick (RC#2) — otherwise the whole IndexedStack (all 4 pages)
+          // rebuilt every second. The IndexedStack is passed as `child` so it is
+          // reused untouched across margin changes.
+          selector: (_, awp) => awp.activeDay != null,
+          builder: (context, hasActiveWorkout, child) {
             return Container(
               margin: EdgeInsets.only(
-                bottom: (uiState.currentPageIndex != 2 && activeWorkout.activeDay != null) ? 80 : 0
+                bottom: (uiState.currentPageIndex != 2 && hasActiveWorkout) ? 80 : 0
               ),
-              child: IndexedStack(
-                index: uiState.currentPageIndex,
-                children: [
-                  WorkoutSelectionPage(theme: theme, key: widget.workoutPageKey),
-                  const SchedulePage(),
-                  ProgramPage(programkey: widget.programPageKey),
-                  AnalyticsPage(theme: theme),
-                ],
-              ),
+              child: child,
             );
-          }
+          },
+          child: IndexedStack(
+            index: uiState.currentPageIndex,
+            children: [
+              WorkoutSelectionPage(theme: theme, key: widget.workoutPageKey),
+              const SchedulePage(),
+              ProgramPage(programkey: widget.programPageKey),
+              AnalyticsPage(theme: theme),
+            ],
+          ),
         ),
         
       
@@ -736,15 +770,17 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
 
     if (uiState.isChoosingExercise || uiState.isDisplayingChart) return null;
 
-    return Consumer<ActiveWorkoutProvider>(
-
-      builder: (context, activeWorkout, child) {
+    return Selector<ActiveWorkoutProvider, bool>(
+      // Only depends on whether a workout is active, not the 1 Hz tick (RC#2).
+      // WorkoutControlBar drives its own clock via its internal Consumer.
+      selector: (_, awp) => awp.activeDay != null,
+      builder: (context, hasActiveWorkout, child) {
         if (uiState.currentPageIndex == 2){
           return CalendarBottomSheet(
             today: DateTime.now(),
             theme: theme
           );
-        } else if (activeWorkout.activeDay != null){
+        } else if (hasActiveWorkout){
           return WorkoutControlBar(theme: theme);
         } else{
           return const SizedBox.shrink();

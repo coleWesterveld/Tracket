@@ -26,6 +26,14 @@ import '../database/profile.dart';
 // okay, im gonna try breaking this up into a few different Providers
 //
 
+/// A planned rep/RPE target, used to prefill a newly added set (#10).
+class SetTarget {
+  final int setLower;
+  final int setUpper;
+  final double rpe;
+  const SetTarget(this.setLower, this.setUpper, this.rpe);
+}
+
 class Profile extends ChangeNotifier {
 
   // these should move to theme or smthn
@@ -70,18 +78,18 @@ class Profile extends ChangeNotifier {
   DatabaseHelper dbHelper;
 
   Future<int> logSet(SetRecord record, {useMetric = false}) async{
-    // debugPrint("adding ${record}");
+    // //debugPrint("adding ${record}");
     return await dbHelper.insertSetRecord(record, useMetric: useMetric);
   }
 
   // unlogs a set by index - returns number of rows affected (should just be one... good check ig)
   Future<int> deleteLoggedSet({required int recordID}) async{
-    // debugPrint("deleting ${recordID}");
+    // //debugPrint("deleting ${recordID}");
     return await dbHelper.deleteSetRecord(recordID);
   }
 
   Future<bool> updateLoggedSet({required int recordID, required Map<String, dynamic> fields}) async{
-    // debugPrint("updated ${recordID}, fields: ${fields}");
+    // //debugPrint("updated ${recordID}, fields: ${fields}");
     return (await dbHelper.updateSetRecord(
       recordID,
       fields
@@ -158,7 +166,7 @@ class Profile extends ChangeNotifier {
         _initializationCompleter.complete();
       }
     } catch (e) {
-      debugPrint("Profile initialization failed: $e");
+      //debugPrint("Profile initialization failed: $e");
       _initializationCompleter.completeError(e);
     }
   }
@@ -183,7 +191,7 @@ class Profile extends ChangeNotifier {
     if (newProgram.programID != -1) {
       currentProgram = newProgram;
     } else{
-      debugPrint("No program found with ID : $programID");
+      //debugPrint("No program found with ID : $programID");
     }
     notifyListeners();
   }
@@ -207,6 +215,49 @@ class Profile extends ChangeNotifier {
 
     notifyListeners();
 
+  }
+
+  /// Creates a temporary day with no preset exercises and returns its index in [split].
+  /// The day is flagged is_temporary in the DB so it is excluded from all normal views.
+  /// Call [removeTemporaryDay] with the returned index when the workout is finished.
+  Future<int> startFreeWorkout() async {
+    final int newDayOrder = split.length;
+    final int newDayId = await dbHelper.insertDay(
+      programId: currentProgram.programID,
+      dayTitle: 'One-Off Workout',
+      dayOrder: newDayOrder,
+      isTemporary: true,
+    );
+
+    final Day tempDay = Day(
+      dayID: newDayId,
+      dayTitle: 'One-Off Workout',
+      programID: currentProgram.programID,
+      dayColor: colors[newDayOrder % colors.length].value,
+      dayOrder: newDayOrder,
+      isTemporary: true,
+    );
+
+    split.add(tempDay);
+    exercises.add([]);
+    sets.add([]);
+    expansionStates.add(false);
+    notifyListeners();
+    return split.length - 1;
+  }
+
+  /// Removes the temporary day at [dayIndex] from memory and the database.
+  Future<void> removeTemporaryDay(int dayIndex) async {
+    if (dayIndex < 0 || dayIndex >= split.length) return;
+    final day = split[dayIndex];
+    if (!day.isTemporary) return;
+
+    await dbHelper.deleteDay(day.dayID);
+    split.removeAt(dayIndex);
+    exercises.removeAt(dayIndex);
+    sets.removeAt(dayIndex);
+    if (dayIndex < expansionStates.length) expansionStates.removeAt(dayIndex);
+    notifyListeners();
   }
 
   void splitAppend(BuildContext context) async {
@@ -485,34 +536,44 @@ class Profile extends ChangeNotifier {
   }
       
 
-  void exerciseAppend({required int index, required int exerciseId}) async {
-    // Insert the exercise into the database and get the inserted ID
-    int id = await dbHelper.insertExercise(
-      dayID: split[index].dayID,
-      exerciseOrder: exercises[index].length,
-      exerciseID: exerciseId,
-    );
-
-    // Fetch the title of the exercise from the exercises table
-    String exerciseTitle = await dbHelper.fetchExerciseTitleById(exerciseId);
-
-    // Add the exercise to the list with the fetched title
-    exercises[index].add(
-      Exercise(
-        id: id,
-        exerciseID: exerciseId,
+  // Returns true on success, false if the DB write failed (so callers can surface
+  // a SnackBar instead of silently swallowing). Callers MUST await this before
+  // sizing any parallel controller arrays (eg. syncControllersForDay), otherwise
+  // the in-memory lists and the controller lists desync -> RangeError.
+  Future<bool> exerciseAppend({required int index, required int exerciseId}) async {
+    try {
+      // Insert the exercise into the database and get the inserted ID
+      int id = await dbHelper.insertExercise(
         dayID: split[index].dayID,
-        exerciseTitle: exerciseTitle, // Use the title from the database
         exerciseOrder: exercises[index].length,
-        notes: ''
-      ),
-    );
+        exerciseID: exerciseId,
+      );
 
-    // Add empty sets and their corresponding controllers
-    sets[index].add([]);
+      // Fetch the title of the exercise from the exercises table
+      String exerciseTitle = await dbHelper.fetchExerciseTitleById(exerciseId);
 
-    // Notify listeners to update the UI
-    notifyListeners();
+      // Add the exercise to the list with the fetched title
+      exercises[index].add(
+        Exercise(
+          id: id,
+          exerciseID: exerciseId,
+          dayID: split[index].dayID,
+          exerciseTitle: exerciseTitle, // Use the title from the database
+          exerciseOrder: exercises[index].length,
+          notes: ''
+        ),
+      );
+
+      // Add empty sets and their corresponding controllers
+      sets[index].add([]);
+
+      // Notify listeners to update the UI
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint("exerciseAppend failed: $e");
+      return false;
+    }
   }
 
   //removes an exercise  from certain index in certain day in list
@@ -601,6 +662,32 @@ class Profile extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Remembers the last set target the user actually touched, so adding a set to a
+  // brand-new exercise can prefill something sensible rather than 0-0 (#10).
+  int? _lastSetLower;
+  int? _lastSetUpper;
+  double? _lastRpe;
+
+  /// The target to prefill when appending a new set in the program (#10):
+  ///   1. the last set of THIS exercise, else
+  ///   2. the last set target the user touched anywhere, else
+  ///   3. a neutral default range.
+  SetTarget prefillTargetFor(int dayIndex, int exerciseIndex) {
+    final setsForExercise = sets[dayIndex][exerciseIndex];
+    if (setsForExercise.isNotEmpty) {
+      final last = setsForExercise.last;
+      return SetTarget(last.setLower, last.setUpper, last.rpe ?? 7.0);
+    }
+
+    if (_lastSetLower != null && _lastSetUpper != null) {
+      return SetTarget(_lastSetLower!, _lastSetUpper!, _lastRpe ?? 7.0);
+    }
+
+    // Neutral default. Deliberately a RANGE (not 0-0), so a fresh set opens in
+    // "Range" mode rather than looking like an exact target of 0 reps.
+    return const SetTarget(8, 12, 7.0);
+  }
+
   //assigns value for an exercise on a day
   void setsAssign({
     required int index1,
@@ -610,13 +697,18 @@ class Profile extends ChangeNotifier {
   }) async {
     // Update the data in the sets list
     sets[index1][index2][index3] = data;
+
+    // This is the "last touched" target used to prefill future new sets (#10)
+    _lastSetLower = data.setLower;
+    _lastSetUpper = data.setUpper;
+    _lastRpe = data.rpe ?? _lastRpe;
     // Update database
     dbHelper.updatePlannedSet(
       data.setID, 
       {
-        'num_sets': data.numSets, 
-        'set_lower': data.setLower, 
-        'set_upper': data.setUpper ?? 0,
+        'num_sets': data.numSets,
+        'set_lower': data.setLower,
+        'set_upper': data.setUpper,
         'rpe' : data.rpe,
       }
     );
@@ -624,8 +716,56 @@ class Profile extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Groups the exercises at [exerciseIndices] on [dayIndex] into one superset (#3).
+  /// The group id is the `id` of the first exercise in the selection, so no counter
+  /// table is needed. Grouping is by id (not adjacency), so reordering is safe.
+  Future<void> setSuperset(int dayIndex, List<int> exerciseIndices) async {
+    if (exerciseIndices.length < 2) return;
+
+    final sorted = [...exerciseIndices]..sort();
+    final int groupId = exercises[dayIndex][sorted.first].id;
+
+    for (final i in sorted) {
+      exercises[dayIndex][i] =
+          exercises[dayIndex][i].copyWith(newSupersetGroup: groupId);
+      await dbHelper.updateExerciseInstance(
+        exercises[dayIndex][i].id,
+        {'superset_group': groupId},
+      );
+    }
+
+    notifyListeners();
+  }
+
+  /// Ungroups every exercise on [dayIndex] belonging to [groupId] (#3).
+  Future<void> clearSuperset(int dayIndex, int groupId) async {
+    for (int i = 0; i < exercises[dayIndex].length; i++) {
+      if (exercises[dayIndex][i].supersetGroup != groupId) continue;
+
+      exercises[dayIndex][i] =
+          exercises[dayIndex][i].copyWith(clearSupersetGroup: true);
+      await dbHelper.updateExerciseInstance(
+        exercises[dayIndex][i].id,
+        {'superset_group': null},
+      );
+    }
+
+    notifyListeners();
+  }
+
+  /// Color for a superset group's bracket/badge. Derived from the group id so the
+  /// same group always gets the same color, and two groups on a day differ.
+  static Color supersetColor(int groupId) {
+    return colors[groupId % colors.length];
+  }
+
   void updateExerciseNotes(int primaryIndex, int index, String newNotes) {
     exercises[primaryIndex][index].notes = newNotes;
+    // Persist to the DB so notes survive a relaunch (same pattern as exerciseAssign).
+    dbHelper.updateExerciseInstance(
+      exercises[primaryIndex][index].id,
+      {'notes': newNotes},
+    );
     notifyListeners();
   }
 
@@ -641,36 +781,50 @@ class Profile extends ChangeNotifier {
 
     sets[index1][index2].insert(index3, data);
 
-    dbHelper.insertPlannedSet(data.exerciseID, data.numSets, data.setLower, data.setUpper ?? 0, index3, data.rpe, data.setID);
+    dbHelper.insertPlannedSet(data.exerciseID, data.numSets, data.setLower, data.setUpper, index3, data.rpe, data.setID);
     notifyListeners();
   }
 
   //adds new set to end of list of sets at [index1][index2]
-  void setsAppend({
-    //required PlannedSet newSets,
+  // Callers choose the target (setLower/setUpper/rpe/numSets); the persisted row is
+  // kept in sync with the in-memory object (previously wrote num_sets=0, rpe=0 while
+  // the object used num_sets=1, rpe=7.0). Returns true on success.
+  // Callers MUST await this before sizing controller arrays (syncControllersForDay).
+  Future<bool> setsAppend({
     required int index1,
     required int index2,
-
-
+    int setLower = 0,
+    int setUpper = 0,
+    double rpe = 7.0,
+    int numSets = 1,
   }) async {
-    int id = await dbHelper.insertPlannedSet(exercises[index1][index2].id, 0, 0, 0, sets[index1][index2].length, 0, null);
-    
-    sets[index1][index2].add(PlannedSet(
-      exerciseID: exercises[index1][index2].id,
-      setID: id,
-      numSets: 1,
-      setLower: 0,
-      setUpper: 0,
-      rpe: 7.0,
-      setOrder: sets[index1][index2].length + 1,
-      )
+    try {
+      final int setOrder = sets[index1][index2].length;
+      int id = await dbHelper.insertPlannedSet(
+        exercises[index1][index2].id,
+        numSets,
+        setLower,
+        setUpper,
+        setOrder,
+        rpe,
+        null,
       );
-    // if a workout is active, update the relevant text editing controllers
-    // NOTE: indexed [exercise][subset]
-    // If a workout is active, update workout-specific controllers
-    // TODO: recreate this in active workout provider but it actually works this time
-   
 
-    notifyListeners();
+      sets[index1][index2].add(PlannedSet(
+        exerciseID: exercises[index1][index2].id,
+        setID: id,
+        numSets: numSets,
+        setLower: setLower,
+        setUpper: setUpper,
+        rpe: rpe,
+        setOrder: setOrder,
+      ));
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint("setsAppend failed: $e");
+      return false;
+    }
   }
 }

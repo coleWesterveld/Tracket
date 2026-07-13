@@ -60,7 +60,7 @@ class ProgramPageState extends State<ProgramPage> {
   TextEditingController alertTEC = TextEditingController();
   
   // Add exercise to a day
-  void _handleExerciseSelected(BuildContext context, Map<String, dynamic> exercise, int index, int exerciseIndex) {
+  void _handleExerciseSelected(BuildContext context, Map<String, dynamic> exercise, int index, int exerciseIndex) async {
     setState(() {
       _exerciseID = exercise['exercise_id'];
     });
@@ -68,10 +68,17 @@ class ProgramPageState extends State<ProgramPage> {
     if (_exerciseID == null) return;
 
     if (_exerciseIndex == -1){
-      context.read<Profile>().exerciseAppend(
+      final bool ok = await context.read<Profile>().exerciseAppend(
         index: index,
         exerciseId: _exerciseID!,
       );
+      // Surface DB failures (eg. transient "database is locked") instead of
+      // silently swallowing them, which made adds look like they randomly failed.
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't add exercise, please try again.")),
+        );
+      }
     } else{
       context.read<Profile>().exerciseAssign(
         index1: index,
@@ -79,7 +86,7 @@ class ProgramPageState extends State<ProgramPage> {
         exerciseId: _exerciseID!
       );
     }
-    
+
   }
 
   @override

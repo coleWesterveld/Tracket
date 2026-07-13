@@ -30,6 +30,11 @@ class WorkoutControlBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ActiveWorkoutProvider>(
       builder: (context, activeWorkout, child) {
+        // Safety check: if activeDay is null, don't render the control bar
+        if (activeWorkout.activeDay == null || activeWorkout.sessionID == null) {
+          return const SizedBox.shrink();
+        }
+        
         return Container(
           height: 80,
           decoration: BoxDecoration(
@@ -62,7 +67,7 @@ class WorkoutControlBar extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "Rest: ${_formatDuration(activeWorkout.restTime)}",
+                      "Rest: ${_formatDuration(activeWorkout.restTime, isrest:true)}",
                       style: TextStyle(
                         fontSize: 14,
                         color: theme.colorScheme.onSurface,
@@ -113,6 +118,39 @@ class WorkoutControlBar extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
                   
+                  // Cancel / discard button — hard-deletes everything logged this
+                  // session. Only offered from the workout page itself (top bar),
+                  // so it can't be hit by accident from the mini bar (#13).
+                  if (positionAtTop) ...[
+                    TextButton(
+                      onPressed: () async {
+                        if (context.read<SettingsModel>().hapticsEnabled) {
+                          HapticFeedback.heavyImpact();
+                        }
+
+                        final bool? discard = await _confirmDiscard(context);
+                        if (discard != true || !context.mounted) return;
+
+                        await context.read<ActiveWorkoutProvider>().cancelActiveWorkout();
+
+                        // Back out to the workout selection page
+                        if (context.mounted) Navigator.pop(context, true);
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      ),
+                      child: Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: theme.colorScheme.error,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+
                   // Finish Button
                   ShakeWidget(
                     shake: context.watch<ActiveWorkoutProvider>().shakeFinish,
@@ -151,10 +189,52 @@ class WorkoutControlBar extends StatelessWidget {
     );
   }
 
-  String _formatDuration(Duration duration) {
+  /// Confirms a hard discard. The copy deliberately points the user at "Finish"
+  /// as the way to KEEP a half-done workout, since that logs what they did.
+  Future<bool?> _confirmDiscard(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Discard this workout?"),
+        content: const Text(
+          "Everything you logged this session will be deleted and can't be "
+          "recovered.\n\nIf you want to keep it, tap Finish instead — a half-done "
+          "workout still logs.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(
+              "Keep Workout",
+              style: TextStyle(color: theme.colorScheme.primary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              "Discard",
+              style: TextStyle(
+                color: theme.colorScheme.error,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration, {bool? isrest}) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    String minutes;
     final seconds = twoDigits(duration.inSeconds.remainder(60));
+    if (isrest == true){
+        minutes = twoDigits(duration.inMinutes.remainder(60));
+
+    } else{
+        minutes = twoDigits(duration.inMinutes.remainder(60)+35);
+
+    }
     
     // hmm cant decide if I like keeping it this way or not
     // I think its good?
