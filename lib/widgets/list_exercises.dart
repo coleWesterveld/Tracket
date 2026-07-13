@@ -9,6 +9,7 @@ import 'package:firstapp/providers_and_settings/program_provider.dart';  // Acce
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:firstapp/widgets/exercise_notes_dialog.dart';
 import 'package:firstapp/widgets/list_sets.dart';
+import 'package:firstapp/widgets/superset_badge.dart';
 
 class ListExercises extends StatefulWidget {
   const ListExercises({
@@ -43,24 +44,15 @@ class _ListExercisesState extends State<ListExercises> {
     });
   }
 
-  /// Small "SS" badge shown on every exercise in a superset.
-  Widget _supersetBadge(int groupId) {
-    final color = Profile.supersetColor(groupId);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withAlpha((255 * 0.20).round()),
-        border: Border.all(color: color, width: 1),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        "SS",
-        style: TextStyle(
-          color: widget.theme.colorScheme.onSurface,
-          fontSize: 11,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
+  /// A1/A2-style badge shown on every exercise in a superset.
+  Widget _supersetBadge(int groupId, int exerciseIndex) {
+    final label = context.read<Profile>().supersetLabel(widget.index, exerciseIndex);
+    if (label == null) return const SizedBox.shrink();
+
+    return SupersetBadge(
+      label: label,
+      color: Profile.supersetColor(groupId),
+      compact: true,
     );
   }
 
@@ -363,7 +355,7 @@ class _ListExercisesState extends State<ListExercises> {
                                 ),
                                 if (supersetGroup != null) ...[
                                   const SizedBox(width: 6),
-                                  _supersetBadge(supersetGroup),
+                                  _supersetBadge(supersetGroup, exerciseIndex),
                                 ],
                               ],
                             ),

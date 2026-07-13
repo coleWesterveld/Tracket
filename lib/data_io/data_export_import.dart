@@ -315,6 +315,9 @@ class DataExportImport {
 
         // Map old exercise instance IDs to new ones
         final instanceIdMap = <int, int>{};
+        // old instance id -> old superset group id (itself an old instance id),
+        // remapped to new ids in a second pass once instanceIdMap is complete.
+        final oldSupersetGroupByOldInst = <int, int>{};
         for (final inst in exerciseInstances) {
           final oldDayId = inst['day_id'] as int;
           final newDayId = dayIdMap[oldDayId];
@@ -330,8 +333,34 @@ class DataExportImport {
             'exercise_order': inst['exercise_order'],
             'exercise_id': newExerciseId,
             'notes': inst['notes'] ?? '',
+            // Carry superset grouping through the round-trip. Null for backups
+            // taken before supersets existed, which is exactly "ungrouped".
+            // NOTE: remapped below - the group id is an exercise_instance id, so
+            // it is meaningless until we know the NEW instance ids.
+            'superset_group': null,
           });
           instanceIdMap[oldInstId] = newInstId;
+
+          // Remember the OLD group id so we can remap it once every instance
+          // has been assigned a new id.
+          final oldGroup = inst['superset_group'] as int?;
+          if (oldGroup != null) oldSupersetGroupByOldInst[oldInstId] = oldGroup;
+        }
+
+        // Second pass: a superset_group holds the id of the FIRST exercise
+        // instance in the group, so it has to be remapped onto the new ids -
+        // otherwise it would point at an unrelated row (or nothing) after import.
+        for (final entry in oldSupersetGroupByOldInst.entries) {
+          final newInstId = instanceIdMap[entry.key];
+          final newGroupId = instanceIdMap[entry.value];
+          if (newInstId == null || newGroupId == null) continue;
+
+          await txn.update(
+            'exercise_instances',
+            {'superset_group': newGroupId},
+            where: 'id = ?',
+            whereArgs: [newInstId],
+          );
         }
 
         // Insert planned sets with remapped instance IDs

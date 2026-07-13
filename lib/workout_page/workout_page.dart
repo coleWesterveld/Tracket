@@ -4,6 +4,7 @@ import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
 import 'package:firstapp/widgets/exercise_notes_dialog.dart';
 import 'package:firstapp/widgets/exercise_search.dart';
+import 'package:firstapp/widgets/superset_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -288,6 +289,8 @@ class _WorkoutState extends State<Workout> {
     // Superset membership for this exercise (#3) — grouped by id, not adjacency
     final int? supersetGroup =
         context.watch<Profile>().exercises[primaryIndex][index].supersetGroup;
+    final String? supersetLabel =
+        context.watch<Profile>().supersetLabel(primaryIndex, index);
 
     return Padding(
       key: ValueKey(context.watch<Profile>().exercises[primaryIndex][index]),
@@ -309,18 +312,19 @@ class _WorkoutState extends State<Workout> {
           borderRadius: BorderRadius.circular(12.0),
           child: Stack(
             children: [
-              // Shared colored left-edge bracket for supersets (#3)
+              // Shared colored left-edge bracket for supersets (#3). Wider than the
+              // program's, since mid-workout this is a glanceable reminder.
               if (supersetGroup != null)
                 Positioned(
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  width: 4,
+                  width: 6,
                   child: Container(color: Profile.supersetColor(supersetGroup)),
                 ),
 
               Padding(
-                padding: EdgeInsets.only(left: supersetGroup != null ? 4 : 0),
+                padding: EdgeInsets.only(left: supersetGroup != null ? 6 : 0),
                 child: Theme(
           data: Theme.of(context).copyWith(
             dividerColor: Colors.transparent,
@@ -360,29 +364,13 @@ class _WorkoutState extends State<Workout> {
                             ),
                           ),
                         ),
-                        // "SS" badge — reminder that this exercise is supersetted (#3)
-                        if (supersetGroup != null) ...[
+                        // A1/A2 badge — glanceable reminder that this exercise is
+                        // part of a superset, and where it sits in the order (#3)
+                        if (supersetGroup != null && supersetLabel != null) ...[
                           const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Profile.supersetColor(supersetGroup)
-                                  .withAlpha((255 * 0.20).round()),
-                              border: Border.all(
-                                color: Profile.supersetColor(supersetGroup),
-                                width: 1,
-                              ),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              "SS",
-                              style: TextStyle(
-                                color: widget.theme.colorScheme.onSurface,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
+                          SupersetBadge(
+                            label: supersetLabel,
+                            color: Profile.supersetColor(supersetGroup),
                           ),
                         ],
                       ],

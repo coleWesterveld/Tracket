@@ -759,6 +759,31 @@ class Profile extends ChangeNotifier {
     return colors[groupId % colors.length];
   }
 
+  /// Standard gym-programming label for an exercise's superset membership: the
+  /// letter says WHICH superset on this day (by order of first appearance), the
+  /// number says the position within it -> "A1", "A2", "B1"... Null if ungrouped.
+  String? supersetLabel(int dayIndex, int exerciseIndex) {
+    final list = exercises[dayIndex];
+    final int? group = list[exerciseIndex].supersetGroup;
+    if (group == null) return null;
+
+    // Letter: order in which groups first appear down the day.
+    final seen = <int>[];
+    for (final exercise in list) {
+      final g = exercise.supersetGroup;
+      if (g != null && !seen.contains(g)) seen.add(g);
+    }
+    final String letter = String.fromCharCode(65 + (seen.indexOf(group) % 26));
+
+    // Number: position among this group's members (members need not be adjacent).
+    int position = 0;
+    for (int i = 0; i <= exerciseIndex; i++) {
+      if (list[i].supersetGroup == group) position++;
+    }
+
+    return '$letter$position';
+  }
+
   void updateExerciseNotes(int primaryIndex, int index, String newNotes) {
     exercises[primaryIndex][index].notes = newNotes;
     // Persist to the DB so notes survive a relaunch (same pattern as exerciseAssign).
