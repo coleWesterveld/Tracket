@@ -232,7 +232,7 @@ class WorkoutControlBar extends StatelessWidget {
         minutes = twoDigits(duration.inMinutes.remainder(60));
 
     } else{
-        minutes = twoDigits(duration.inMinutes.remainder(60)+35);
+        minutes = twoDigits(duration.inMinutes.remainder(60));
 
     }
     
