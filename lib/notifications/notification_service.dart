@@ -29,7 +29,8 @@ class NotiService {
   final notificationsPlugin = FlutterLocalNotificationsPlugin();
 
   // INITIALIZE
-  Future<void> initNotification() async {
+  // Returns true if notification permission is granted, false if denied.
+  Future<bool> initNotification() async {
     // initialize timezone
     tz.initializeTimeZones();
     final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
@@ -38,11 +39,13 @@ class NotiService {
     // prepare android init settings
     const initSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    // prepare ios init settings
+    // prepare ios init settings.
+    // We don't request permission during init so that we can request it
+    // explicitly below and capture whether the user granted it.
     const initSettingsIOS = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
 
     // init settings
@@ -54,10 +57,34 @@ class NotiService {
     // finally, init plugin
     await notificationsPlugin.initialize(initSettings);
 
+    return requestPermissions();
+  }
+
+  // Request notification permission on the current platform.
+  // On iOS this prompts the first time and returns the current status
+  // thereafter (it will not re-prompt once the user has decided).
+  // Returns true if granted, false if denied.
+  Future<bool> requestPermissions() async {
+    final iosImpl = notificationsPlugin
+        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+    if (iosImpl != null) {
+      final granted = await iosImpl.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      return granted ?? false;
+    }
+
     // Request POST_NOTIFICATIONS permission on Android 13+
-    await notificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+    final androidImpl = notificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      final granted = await androidImpl.requestNotificationsPermission();
+      return granted ?? false;
+    }
+
+    return false;
   }
 
   // NOTIFICATIONS DETAIL SETUP
@@ -91,14 +118,18 @@ class NotiService {
     );
   }
 
-  Future<void> scheduleWorkoutNotifications({
+  // Returns true if notifications were scheduled, false if they were skipped
+  // because notifications are disabled in settings or permission was denied.
+  Future<bool> scheduleWorkoutNotifications({
     required Profile profile,
     required SettingsModel settings,
     int daysInAdvance = 30,
   }) async {
-    if (!settings.notificationsEnabled) return;
-    
-    await initNotification();
+    if (!settings.notificationsEnabled) return false;
+
+    final permissionGranted = await initNotification();
+    if (!permissionGranted) return false;
+
     await cancelAllNotifications();
 
     final originDate = convertToTZDateTime(profile.origin);
@@ -168,6 +199,7 @@ class NotiService {
       ////debugPrint("  📊 ${day.dayTitle}: $dayCount notifications scheduled");
     }
     ////debugPrint("✅ Total notifications scheduled: $totalScheduled");
+    return true;
   }
 
   tz.TZDateTime _nextOccurrence(workout.Day day, Profile profile, tz.TZDateTime fromDate) {

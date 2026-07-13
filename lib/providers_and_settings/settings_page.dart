@@ -46,6 +46,25 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _showNotificationsDeniedDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Notifications Disabled', textAlign: TextAlign.center),
+        content: const Text(
+          'Notifications are turned off for this app. To get workout reminders, enable notifications for this app in your device Settings.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _importData() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -197,19 +216,25 @@ class _SettingsPageState extends State<SettingsPage> {
               trailing: Switch.adaptive(
                 activeTrackColor: Theme.of(context).colorScheme.primary,
                 value: settings.notificationsEnabled,
-                onChanged: (isEnabled) {
+                onChanged: (isEnabled) async {
                   settings.toggleNotifications(context);
 
                   final notiService = NotiService();
                   if (isEnabled){
-                    notiService.scheduleWorkoutNotifications(
+                    final granted = await notiService.scheduleWorkoutNotifications(
                       profile: context.read<Profile>(),
                       settings: context.read<SettingsModel>(),
                     );
+                    // Permission denied: revert the toggle and tell the user
+                    // how to fix it in their device settings.
+                    if (!granted && mounted) {
+                      settings.toggleNotifications(context);
+                      _showNotificationsDeniedDialog();
+                    }
                   } else{
                     notiService.cancelAllNotifications();
                   }
-                  
+
                 },
               ),
             ),

@@ -151,21 +151,35 @@ class _MainPage extends State<GymApp>{
               final programChanged = previousActiveWorkoutProvider!.activeProgramId != null &&
                   previousActiveWorkoutProvider.activeProgramId != programProvider.currentProgram.programID;
 
+              // The active workout is tied to a specific Day (stable dayID), NOT to
+              // a position in the list. Re-locate it by dayID every time Profile
+              // changes, so reordering/inserting/deleting days mid-workout keeps the
+              // workout pointed at the SAME day instead of whatever now sits at the
+              // old index.
+              final int? activeDayID = previousActiveWorkoutProvider.activeDay?.dayID;
+              final int relocatedIndex = activeDayID == null
+                  ? (previousActiveWorkoutProvider.activeDayIndex ?? -1)
+                  : programProvider.split.indexWhere((d) => d.dayID == activeDayID);
+
               if (programChanged) {
                 // Program switched while workout was active — clear the workout
                 ////debugPrint("Active workout cleared: program switched");
                 previousActiveWorkoutProvider
                 ..programProvider = programProvider
                 ..setActiveDayAndStartNew(null);
-              } else if (previousActiveWorkoutProvider.activeDayIndex! < programProvider.split.length &&
-                  previousActiveWorkoutProvider.activeDayIndex! < programProvider.exercises.length &&
-                  previousActiveWorkoutProvider.activeDayIndex! < programProvider.sets.length) {
+              } else if (relocatedIndex >= 0 &&
+                  relocatedIndex < programProvider.split.length &&
+                  relocatedIndex < programProvider.exercises.length &&
+                  relocatedIndex < programProvider.sets.length) {
+                // Follow the day to its (possibly new) index.
                 previousActiveWorkoutProvider
                 ..programProvider = programProvider
-                ..syncControllersForDay(previousActiveWorkoutProvider.activeDayIndex!);
+                ..activeDayIndex = relocatedIndex
+                ..activeDay = programProvider.split[relocatedIndex]
+                ..syncControllersForDay(relocatedIndex);
               } else {
-                // Active workout day index is no longer valid
-                ////debugPrint("Active workout cleared: day index out of bounds for new program");
+                // The active day no longer exists (deleted) — clear the workout
+                ////debugPrint("Active workout cleared: active day no longer exists");
                 previousActiveWorkoutProvider
                 ..programProvider = programProvider
                 ..setActiveDayAndStartNew(null);
