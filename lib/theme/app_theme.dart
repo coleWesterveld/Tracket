@@ -52,6 +52,10 @@ class AppTheme {
         surfaceContainerHighest: widgetBackgroundLight, // Slightly lighter widgets
         onSurfaceVariant: onWidgetBackground,
         outline: outlineColor, // Borders for widgets
+        // Central shadow token. On dark surfaces a shadow reads as a subtle
+        // darkening, so keep it moderate. Every BoxShadow that uses
+        // colorScheme.shadow inherits this, keeping shadows even everywhere.
+        shadow: Colors.black.withValues(alpha: 0.5),
       ),
 
       // --- Component Theming (Ensure they use widget background) ---
@@ -202,6 +206,10 @@ class AppTheme {
         surfaceContainerHighest: widgetBackgroundLight,
         onSurfaceVariant: onWidgetBackground.withAlpha((0.8 * 255).round()),
         outline: outlineColor,
+        // Central shadow token. On white surfaces an opaque shadow is harsh,
+        // so keep it soft. Every BoxShadow that uses colorScheme.shadow
+        // inherits this, keeping shadows even everywhere.
+        shadow: Colors.black.withValues(alpha: 0.12),
       ),
 
       // --- Component Theming ---

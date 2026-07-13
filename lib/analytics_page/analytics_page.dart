@@ -742,7 +742,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       blurRadius: 5,
                       offset: const Offset(0, 0),
                       spreadRadius: 2,
-                      color: widget.theme.colorScheme.shadow.withAlpha((0.3*255).round())
+                      color: widget.theme.colorScheme.shadow
               
                     )
                   ]
@@ -831,7 +831,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         blurRadius: 5,
                         offset: const Offset(0, 0),
                         spreadRadius: 2,
-                        color: widget.theme.colorScheme.shadow.withAlpha((0.3*255).round())
+                        color: widget.theme.colorScheme.shadow
                 
                       )
                     ]
@@ -949,7 +949,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 blurRadius: 5,
                 offset: const Offset(0, 0),
                 spreadRadius: 2,
-                color: widget.theme.colorScheme.shadow.withAlpha((0.3*255).round())
+                color: widget.theme.colorScheme.shadow
 
               )
             ]

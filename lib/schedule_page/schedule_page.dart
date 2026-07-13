@@ -280,7 +280,7 @@ class _MyScheduleState extends State<SchedulePage> {
                       blurRadius: 5,
                       offset: const Offset(0, 0),
                       spreadRadius: 2,
-                      color: theme.colorScheme.shadow.withAlpha((0.3*255).round())
+                      color: theme.colorScheme.shadow
 
                     )
                   ]
@@ -491,7 +491,7 @@ class _MyScheduleState extends State<SchedulePage> {
                               blurRadius: 5,
                               offset: const Offset(2, 2),
                               spreadRadius: 2,
-                              color: theme.colorScheme.shadow.withAlpha((0.3*255).round())
+                              color: theme.colorScheme.shadow
                             )
                           ],
                           border: Border.all(

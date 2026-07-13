@@ -509,7 +509,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
 
               uiState.currentPageIndex = index;
             },
-            shadowColor: Colors.black,
+            shadowColor: theme.colorScheme.shadow,
             indicatorColor: theme.colorScheme.primary,
             indicatorShape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.all(

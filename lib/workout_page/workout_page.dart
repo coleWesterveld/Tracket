@@ -645,7 +645,7 @@ class _WorkoutState extends State<Workout> {
                           decoration: BoxDecoration(
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withAlpha((255 * 0.5).round()),
+                                color: widget.theme.colorScheme.shadow,
                                 offset: const Offset(0.0, 0.0),
                                 blurRadius: 12.0,
                               ),
