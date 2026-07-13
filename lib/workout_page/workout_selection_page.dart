@@ -7,7 +7,9 @@
 import 'package:firstapp/app_tutorial/app_tutorial_keys.dart';
 import 'package:firstapp/app_tutorial/tutorial_manager.dart';
 import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
+import 'package:firstapp/other_utilities/format_reps.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
+import 'package:firstapp/widgets/superset_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:showcaseview/showcaseview.dart';
@@ -81,6 +83,41 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
     } else if (_pulseController.isAnimating) {
       _pulseController.stop();
     }
+  }
+
+  // Supersets on the workout-selection tab (#3) — same UI as the program page:
+  // a colored left-edge bracket plus an A1/A2 badge beside the exercise title, so
+  // you can see the grouping when picking a workout, not only once you're in it.
+  Border _exerciseRowBorder(BuildContext context, int dayIndex, int exerciseIndex) {
+    final group =
+        context.watch<Profile>().exercises[dayIndex][exerciseIndex].supersetGroup;
+
+    return Border(
+      bottom: BorderSide(
+        color: widget.theme.colorScheme.outline,
+        width: 0.5,
+      ),
+      left: group != null
+          ? BorderSide(color: Profile.supersetColor(group), width: 4)
+          : BorderSide.none,
+    );
+  }
+
+  Widget _exerciseSupersetBadge(BuildContext context, int dayIndex, int exerciseIndex) {
+    final profile = context.watch<Profile>();
+    final group = profile.exercises[dayIndex][exerciseIndex].supersetGroup;
+    if (group == null) return const SizedBox.shrink();
+
+    final label = profile.supersetLabel(dayIndex, exerciseIndex);
+    if (label == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 6.0),
+      child: SupersetBadge(
+        label: label,
+        color: Profile.supersetColor(group),
+      ),
+    );
   }
 
   Color _stripeColor(BuildContext context, int index) {
@@ -785,12 +822,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                               return Container(
                                 decoration: BoxDecoration(
                                   borderRadius: const BorderRadius.all(Radius.circular(1)),
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: widget.theme.colorScheme.outline,
-                                      width: 0.5
-                                    ),
-                                  ),
+                                  border: _exerciseRowBorder(context, index, exerciseIndex),
                                 ),
                                 child: Material(
                                   color: widget.theme.colorScheme.surface,
@@ -805,14 +837,21 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                               Expanded(
                                                 child: Padding(
                                                   padding: const EdgeInsets.all(6.0),
-                                                  child: Text(
-                                                    overflow: TextOverflow.ellipsis,
-                                                    context.watch<Profile>().exercises[index][exerciseIndex].exerciseTitle,
-                                                    style: TextStyle(
-                                                      color: widget.theme.colorScheme.onSurface,
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
+                                                  child: Row(
+                                                    children: [
+                                                      Flexible(
+                                                        child: Text(
+                                                          overflow: TextOverflow.ellipsis,
+                                                          context.watch<Profile>().exercises[index][exerciseIndex].exerciseTitle,
+                                                          style: TextStyle(
+                                                            color: widget.theme.colorScheme.onSurface,
+                                                            fontSize: 16,
+                                                            fontWeight: FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      _exerciseSupersetBadge(context, index, exerciseIndex),
+                                                    ],
                                                   ),
                                                 ),
                                               ),
@@ -823,7 +862,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                                   children: [
                                                     for (int i = 0; i < context.watch<Profile>().sets[index][exerciseIndex].length; i++)
                                                       Text(
-                                                        "${context.watch<Profile>().sets[index][exerciseIndex][i].numSets} x (${context.watch<Profile>().sets[index][exerciseIndex][i].setLower}-${context.watch<Profile>().sets[index][exerciseIndex][i].setUpper})",
+                                                        "${context.watch<Profile>().sets[index][exerciseIndex][i].numSets} x (${formatRepRange(context.watch<Profile>().sets[index][exerciseIndex][i].setLower, context.watch<Profile>().sets[index][exerciseIndex][i].setUpper)})",
                                                         style: const TextStyle(
                                                           fontWeight: FontWeight.w700,
                                                         ),
@@ -1208,7 +1247,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                             return Container(
                               decoration: BoxDecoration(
                                 borderRadius: const BorderRadius.all(Radius.circular(1)),
-                                border: Border(bottom: BorderSide(color: widget.theme.colorScheme.outline),),
+                                border: _exerciseRowBorder(context, index, exerciseIndex),
                               ),
                               child: Material(
                                 color:widget.theme.colorScheme.surface,
@@ -1223,14 +1262,21 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                             Expanded(
                                               child: Padding(
                                                 padding: const EdgeInsets.all(6.0),
-                                                child: Text(
-                                                  overflow: TextOverflow.ellipsis,
-                                                  context.watch<Profile>().exercises[index][exerciseIndex].exerciseTitle,
-                                                  style: TextStyle(
-                                                    color: widget.theme.colorScheme.onSurface,
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
+                                                child: Row(
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        overflow: TextOverflow.ellipsis,
+                                                        context.watch<Profile>().exercises[index][exerciseIndex].exerciseTitle,
+                                                        style: TextStyle(
+                                                          color: widget.theme.colorScheme.onSurface,
+                                                          fontSize: 16,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    _exerciseSupersetBadge(context, index, exerciseIndex),
+                                                  ],
                                                 ),
                                               ),
                                             ),
@@ -1241,7 +1287,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                                 children: [
                                                   for (int i = 0; i < context.watch<Profile>().sets[index][exerciseIndex].length; i++)
                                                     Text(
-                                                      "${context.watch<Profile>().sets[index][exerciseIndex][i].numSets} x (${context.watch<Profile>().sets[index][exerciseIndex][i].setLower}-${context.watch<Profile>().sets[index][exerciseIndex][i].setUpper})",
+                                                      "${context.watch<Profile>().sets[index][exerciseIndex][i].numSets} x (${formatRepRange(context.watch<Profile>().sets[index][exerciseIndex][i].setLower, context.watch<Profile>().sets[index][exerciseIndex][i].setUpper)})",
                                                       style: const TextStyle(
                                                         fontWeight: FontWeight.w700,
                                                       ),

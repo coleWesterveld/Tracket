@@ -18,35 +18,26 @@ class SupersetBadge extends StatelessWidget {
   /// e.g. "A1"
   final String label;
   final Color color;
+
+  /// Reserved for callers that need a denser variant; styling is currently shared.
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 6 : 8,
-        vertical: compact ? 2 : 3,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withAlpha((255 * 0.22).round()),
-        border: Border.all(color: color, width: 1.5),
+        color: color.withAlpha((255 * 0.20).round()),
+        border: Border.all(color: color, width: 1),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.link, size: compact ? 12 : 14, color: color),
-          const SizedBox(width: 3),
-          Text(
-            label,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: compact ? 11 : 12,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurface,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }

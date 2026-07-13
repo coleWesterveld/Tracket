@@ -312,19 +312,18 @@ class _WorkoutState extends State<Workout> {
           borderRadius: BorderRadius.circular(12.0),
           child: Stack(
             children: [
-              // Shared colored left-edge bracket for supersets (#3). Wider than the
-              // program's, since mid-workout this is a glanceable reminder.
+              // Shared colored left-edge bracket for supersets (#3)
               if (supersetGroup != null)
                 Positioned(
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  width: 6,
+                  width: 4,
                   child: Container(color: Profile.supersetColor(supersetGroup)),
                 ),
 
               Padding(
-                padding: EdgeInsets.only(left: supersetGroup != null ? 6 : 0),
+                padding: EdgeInsets.only(left: supersetGroup != null ? 4 : 0),
                 child: Theme(
           data: Theme.of(context).copyWith(
             dividerColor: Colors.transparent,
