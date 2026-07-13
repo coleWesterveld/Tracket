@@ -7,18 +7,16 @@
 import 'package:firstapp/app_tutorial/app_tutorial_keys.dart';
 import 'package:firstapp/app_tutorial/tutorial_manager.dart';
 import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
-import 'package:firstapp/providers_and_settings/settings_provider.dart';
+import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:showcaseview/showcaseview.dart';
 import '../providers_and_settings/program_provider.dart';
 //import 'package:flutter/cupertino.dart';
-import '../schedule_page/schedule_page.dart';
 import 'workout_page.dart';
 import '../other_utilities/days_between.dart';
-import '../other_utilities/lightness.dart';
-import '../providers_and_settings/settings_page.dart';
 import 'package:firstapp/other_utilities/events.dart';
+import 'package:intl/intl.dart';
 
 class WorkoutSelectionPage extends StatefulWidget {
   final ThemeData theme;
@@ -36,16 +34,112 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
 
   late AnimationController _pulseController;
 
-  List<ExpansionTileController> _expansionControllers = [];
+  List<ExpansibleController> _expansionControllers = [];
   // States tracked separately to maintain collapse/open state across rebuilds and profile.split size changes
   List<bool> _expansionStates = [];
+
+  // Whether today's scheduled workout has already been logged (#15). Today's tile
+  // is picked purely by day-of-week rotation, so without this it kept showing the
+  // pulsing "Start This Workout" CTA even after the user finished it.
+  bool _todayComplete = false;
+  ActiveWorkoutProvider? _activeWorkoutRef;
+  bool _wasWorkoutActive = false;
+
+  Future<void> _loadTodayCompletion() async {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final tomorrowStart = todayStart.add(const Duration(days: 1));
+
+    final loggedDays = await context
+        .read<Profile>()
+        .getDaysWithHistory(todayStart, tomorrowStart);
+
+    if (!mounted) return;
+    final bool complete = loggedDays.isNotEmpty;
+    if (complete != _todayComplete) {
+      setState(() => _todayComplete = complete);
+    }
+  }
+
+  // A workout ending is the moment today's completion can flip to true.
+  // (This listener fires on the provider's 1 Hz tick too, but it only compares a
+  // bool — it never rebuilds unless completion actually changed.)
+  void _onActiveWorkoutChanged() {
+    final bool isActive = _activeWorkoutRef?.activeDay != null;
+    if (_wasWorkoutActive && !isActive) {
+      _loadTodayCompletion();
+    }
+    _wasWorkoutActive = isActive;
+  }
+
+  // Keep the 60fps pulse from burning battery while it can't even be seen (#6b):
+  // it used to `repeat()` forever, including when this tab was off-screen in the
+  // IndexedStack or when today's workout was already done.
+  void _syncPulse(bool shouldPulse) {
+    if (shouldPulse) {
+      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+    } else if (_pulseController.isAnimating) {
+      _pulseController.stop();
+    }
+  }
+
+  Color _stripeColor(BuildContext context, int index) {
+    // Completed days get a "done" stripe instead of the day's accent color (#15)
+    if (_todayComplete) return widget.theme.colorScheme.primary;
+    return Color(context.watch<Profile>().split[index].dayColor);
+  }
+
+  // Shown in place of the pulsing "Start This Workout" CTA once today is logged.
+  // Still tappable — the user may legitimately want to train the day again.
+  Widget _buildCompletedButton(BuildContext context, int index) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          side: BorderSide(color: widget.theme.colorScheme.primary, width: 1.5),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        onPressed: () => _startWorkout(context, index),
+        icon: Icon(Icons.check_circle, color: widget.theme.colorScheme.primary),
+        label: Text(
+          "Completed Today",
+          style: TextStyle(
+            color: widget.theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startWorkout(BuildContext context, int index) async {
+    bool? setWorkout = true;
+    // if theres already a workout active, prompt user to choose - end current workout to start new one or cancel
+    if (context.read<ActiveWorkoutProvider>().activeDay != null) {
+      setWorkout = await confirmNewWorkout(context);
+    }
+
+    if (setWorkout == true && context.mounted) {
+      // This will clear any old snapshot, generate new ID, init structures, start timers
+      await context.read<ActiveWorkoutProvider>().setActiveDayAndStartNew(index);
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => Workout(theme: widget.theme),
+          ),
+        );
+      }
+    }
+  }
 
 
     // Method for TutorialManager to expand a tile
   void expandTile({int? index}) {
     
     if (!mounted) {
-       debugPrint("Error expanding tile: WorkoutSelectionPageState not mounted.");
+       //debugPrint("Error expanding tile: WorkoutSelectionPageState not mounted.");
        return;
     }
 
@@ -102,13 +196,13 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                     // that aren't automatically handled by the ExpansionTile itself.
                  } catch (e) {
                     // Catch potential errors during the actual expand call
-                    debugPrint("Error during controller.expand() for index $targetIndex inside callback: $e");
+                    //debugPrint("Error during controller.expand() for index $targetIndex inside callback: $e");
                  }
             } else {
-              debugPrint("Tile already expanded post-frame: $targetIndex");
+              //debugPrint("Tile already expanded post-frame: $targetIndex");
             }
         } else {
-          debugPrint("Error expanding tile post-frame: targetIndex $targetIndex out of bounds or state not mounted.");
+          //debugPrint("Error expanding tile post-frame: targetIndex $targetIndex out of bounds or state not mounted.");
         }
     });
   }
@@ -123,20 +217,33 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
       _initializeControllersAndStates();
     }
 
+    // Track the active workout so we can re-check today's completion the moment a
+    // workout is finished (#15).
+    final activeWorkout = context.read<ActiveWorkoutProvider>();
+    if (!identical(_activeWorkoutRef, activeWorkout)) {
+      _activeWorkoutRef?.removeListener(_onActiveWorkoutChanged);
+      _activeWorkoutRef = activeWorkout;
+      _wasWorkoutActive = activeWorkout.activeDay != null;
+      _activeWorkoutRef!.addListener(_onActiveWorkoutChanged);
+      _loadTodayCompletion();
+    }
   }
 
   @override
   void initState() {
     super.initState();
 
+    // NOTE: intentionally not started here — build() calls _syncPulse(), which
+    // only runs it when this tab is visible and today isn't already done (#6b).
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1300),
       vsync: this,
-    )..repeat(reverse: true); // Continuously animates back and forth
+    );
   }
 
   @override
   void dispose() {
+    _activeWorkoutRef?.removeListener(_onActiveWorkoutChanged);
     _pulseController.dispose();
 
     // for (var controller in _expansionControllers) {
@@ -146,20 +253,24 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
     super.dispose();
   }
 
-   // Initialize or update controllers when split length changes
+   // Initialize or update controllers when split length changes.
+  // Controllers are indexed by the full split list (including temp days),
+  // but we only render non-temporary days, so temp entries are never used.
   void _initializeControllersAndStates() {
     final profile = Provider.of<Profile>(context, listen: false);
-    
+
     // Save current expansion states before recreating
     final oldStates = _expansionStates.asMap();
-    
-    // Create new controllers and states
+
+    // Create new controllers and states sized to the full split list
     _expansionControllers = List.generate(
       profile.split.length,
-      (index) => ExpansionTileController(),
+      (index) => ExpansibleController(),
     );
-    
-    // Initialize states - preserve old states where possible
+
+    // Initialize states - preserve old states where possible.
+    // toExpand() returns the raw split index (always non-temp), which we use
+    // directly since controllers are indexed by raw split position.
     _expansionStates = List.generate(
       profile.split.length,
       (index) => oldStates[index] ?? (index == toExpand()),
@@ -181,39 +292,112 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
     }
   }
 
+  String _weekdayForDay(int index) {
+    final profile = context.read<Profile>();
+    final origin = profile.origin;
+    final splitLen = profile.splitLength;
+    final dayOrder = profile.split[index].dayOrder;
+
+    final now = DateTime.now();
+    final daysSinceOrigin = daysBetween(origin, now);
+    final cycleOffset = ((daysSinceOrigin % splitLen) + splitLen) % splitLen;
+    final cycleStart = now.subtract(Duration(days: cycleOffset));
+    final dayDate = cycleStart.add(Duration(days: dayOrder));
+    return DateFormat('E').format(dayDate).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!context.watch<Profile>().isInitialized) {
       return const Center(child: CircularProgressIndicator());
     }
-    
-    int todaysWorkout = toExpand();
+
+    final profile = context.watch<Profile>();
+
+    // Filter out temporary (one-off) days — they should not appear in the list
+    final nonTempIndices = List<int>.generate(profile.split.length, (i) => i)
+        .where((i) => !profile.split[i].isTemporary)
+        .toList();
+
+    // toExpand() already skips temp days via getWorkoutForDay; find its position
+    // in the filtered list so we can pin it to the top
+    final int todaysWorkoutRaw = toExpand();
+    final int todaysWorkoutPos = todaysWorkoutRaw == -1
+        ? -1
+        : nonTempIndices.indexOf(todaysWorkoutRaw);
+
+    // +1 for the Free Workout button always appended at the end
+    final int extraForNoWorkout = todaysWorkoutPos == -1 ? 1 : 0;
+    final int totalItems = nonTempIndices.length + extraForNoWorkout + 1;
+
+    // Only pulse when this tab is actually on-screen, there IS a workout today,
+    // and it isn't already done (#6b). Off-screen IndexedStack pages stay built,
+    // so an unconditional repeat() animated at 60fps forever.
+    final bool pageVisible =
+        context.watch<UiStateProvider>().currentPageIndex == 0;
+    _syncPulse(pageVisible && todaysWorkoutPos != -1 && !_todayComplete);
+
     return ListView.builder(
-      padding: EdgeInsets.only(bottom: 10),
-      // building the rest of the tiles, one for each day from split list stored in user
-      //dismissable and reorderable: each child for dismissable needs to have a unique key
-      itemCount: (todaysWorkout == -1)
-          ? context.watch<Profile>().split.length + 1
-          : context.watch<Profile>().split.length,
-        
-    
+      padding: const EdgeInsets.only(bottom: 10),
+      itemCount: totalItems,
       itemBuilder: (context, index) {
-        if (todaysWorkout != -1) {
+        // Last item is always the Free Workout button
+        if (index == totalItems - 1) {
+          return _buildFreeWorkoutButton(context);
+        }
+
+        if (todaysWorkoutPos != -1) {
           if (index == 0) {
-            return dayBuild(
-                context, todaysWorkout, true);
-          } else if (index <= todaysWorkout) {
-            return dayBuild(
-                context, index - 1, false);
+            return dayBuild(context, nonTempIndices[todaysWorkoutPos], true);
+          } else if (index <= todaysWorkoutPos) {
+            return dayBuild(context, nonTempIndices[index - 1], false);
           } else {
-            return dayBuild(context, index, false);
+            return dayBuild(context, nonTempIndices[index], false);
           }
         } else {
-          return dayBuild(context, index - 1, false);
+          return dayBuild(context, index == 0 ? -1 : nonTempIndices[index - 1], false);
         }
       },
     );
-    
+  }
+
+  Widget _buildFreeWorkoutButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: widget.theme.colorScheme.outline),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        onPressed: () async {
+          bool? proceed = true;
+          if (context.read<ActiveWorkoutProvider>().activeDay != null) {
+            proceed = await confirmNewWorkout(context);
+          }
+          if (proceed == true && context.mounted) {
+            final int newIndex = await context.read<Profile>().startFreeWorkout();
+            if (context.mounted) {
+              await context.read<ActiveWorkoutProvider>().setActiveDayAndStartNew(newIndex);
+            }
+            if (context.mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => Workout(theme: widget.theme)),
+              );
+            }
+          }
+        },
+        child: Text(
+          '+ One-Off Workout',
+          style: TextStyle(
+            color: widget.theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget dayBuild(BuildContext context, int index, bool todaysWorkout) {
@@ -283,36 +467,29 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
         
             child: Container(
               decoration: BoxDecoration(
-            
+
                 border: Border.all(
                   color: widget.theme.colorScheme.outline,
                   width: 0.5
                 ),
                 boxShadow: [
-                  todaysWorkout
-                      ? BoxShadow(
-                          color: Color(context.watch<Profile>().split[index].dayColor),
-                          offset: const Offset(2.0, 2.0),
-                          blurRadius: 4.0,
-                        )
-                      : BoxShadow(
-                        color: widget.theme.colorScheme.shadow,
-                        offset: const Offset(2, 2),
-                        blurRadius: 4.0,
-                      ),
-      
-                  // BoxShadow(
-                  //   color: lighten(widget.theme.colorScheme.shadow, 20),
-                  //   offset: const Offset(-2, -2),
-                  //   blurRadius: 4.0,
-                  // ),
+                  BoxShadow(
+                    color: widget.theme.colorScheme.shadow,
+                    offset: const Offset(2, 2),
+                    blurRadius: 4.0,
+                  ),
                 ],
                 color: widget.theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(12.0),
               ),
-                    
-              //defining the inside of the actual box, display information
-              child: Theme(
+
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12.0),
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(left: todaysWorkout ? 4 : 0),
+                      child: Theme(
                 data: Theme.of(context).copyWith(
                   splashColor: Colors.transparent,
                   dividerColor: Colors.transparent,
@@ -323,7 +500,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                     horizontalTitleGap: 0
                   ),
                 ),
-                      
+
                 //expandable to see exercises and sets for that day
                 child: ExpansionTile(
                     controller: _expansionControllers[index],
@@ -339,36 +516,30 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                         });
                       }
                     },
-                    initiallyExpanded: todaysWorkout,
-                    //initiallyExpanded: toExpand(index),
-                    //controller: context.watch<Profile>().controllers[index],
+                    // Don't force-expand a day that's already been done today (#15)
+                    initiallyExpanded: todaysWorkout && !_todayComplete,
                     iconColor: widget.theme.colorScheme.onSurface,
                     collapsedIconColor: widget.theme.colorScheme.onSurface,
-                        
-                    //top row always displays day title, and edit button
-                    //sized boxes and padding is just a bunch of formatting stuff
-                    //tbh it could probably be made more concise
-                    
-      
+
                     leading: Padding(
                     padding: const EdgeInsets.only(left: 8.0),
-                    child: Row( 
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         SizedBox(
-                          //width: 50,
+                          width: 42,
                           child: Text(
-                            "${index + 1}",
-                                                  
+                            _weekdayForDay(index),
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               height: 0.6,
                               color: widget.theme.colorScheme.onSurface,
-                              fontSize: 35,
+                              fontSize: 13,
                               fontWeight: FontWeight.w900,
                             ),
                             ),
                         ),
-                    
+
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: Container(
@@ -378,7 +549,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                               shape: BoxShape.circle,
                               color: Color(context.watch<Profile>().split[index].dayColor),
                             ),
-                          
+
                           ),
                         ),
                       ]
@@ -489,7 +660,9 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                     .length) {
                               return Padding(
                                 padding: const EdgeInsets.all(8),
-                                child: todaysWorkout
+                                child: (todaysWorkout && _todayComplete)
+                                    ? _buildCompletedButton(context, index)
+                                    : todaysWorkout
                                     ? AnimatedBuilder(
                                         animation: _pulseController,
                                         builder: (context, child) {
@@ -533,7 +706,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                                 setWorkout =  await confirmNewWorkout(context);
                                               }
                 
-                                              //debugPrint("setit: $setWorkout");
+                                              ////debugPrint("setit: $setWorkout");
                 
                                               // If user did not select back, then we start it
                                               if (setWorkout == true){ // User confirmed to start new (or no old one active)
@@ -586,7 +759,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                                 setWorkout = await confirmNewWorkout(context);
                                               }
                 
-                                              //debugPrint("setit: $setWorkout");
+                                              ////debugPrint("setit: $setWorkout");
                 
                                               // If user did not select back, then we start it
                                               if (setWorkout == true){ // User confirmed to start new (or no old one active)
@@ -629,49 +802,35 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                              Align(
-                                                alignment: Alignment.topLeft,
+                                              Expanded(
                                                 child: Padding(
                                                   padding: const EdgeInsets.all(6.0),
-                                                  child: SizedBox(
-                                                    width: MediaQuery.sizeOf(context).width - 222,
-                                                    child: Text(
-                                                      overflow: TextOverflow.visible,
-                                                      //softWrap: true,
-                                                      context.watch<Profile>().exercises[index][exerciseIndex].exerciseTitle,
-                                                      style: TextStyle(
-                                                        color: widget.theme.colorScheme.onSurface,
-                                                        fontSize: 16,
-                                                        fontWeight: FontWeight.w600,
-                                                      ),
+                                                  child: Text(
+                                                    overflow: TextOverflow.ellipsis,
+                                                    context.watch<Profile>().exercises[index][exerciseIndex].exerciseTitle,
+                                                    style: TextStyle(
+                                                      color: widget.theme.colorScheme.onSurface,
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.w600,
                                                     ),
                                                   ),
                                                 ),
                                               ),
-                                              SizedBox(
-                                              height: context.watch<Profile>().sets[index][exerciseIndex].length * 20 + 16,
-                                              width: 150,
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(8.0),
-                                                child: ListView(
-                                                  physics: const NeverScrollableScrollPhysics(),
+                                              Padding(
+                                                padding: const EdgeInsets.all(6.0),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
                                                   children: [
-                                                    for(int i = 0; i < context.watch<Profile>().sets[index][exerciseIndex].length; i++) 
-                                                      Padding(
-                                                        padding: const EdgeInsets.only(right: 8.0),
-                                                        child: Center(
-                                                          child: Text(
-                                                            "${context.watch<Profile>().sets[index][exerciseIndex][i].numSets} x (${context.watch<Profile>().sets[index][exerciseIndex][i].setLower}-${context.watch<Profile>().sets[index][exerciseIndex][i].setUpper})",
-                                                            style: const TextStyle(
-                                                              fontWeight: FontWeight.w700,
-                                                            )
-                                                            ),
+                                                    for (int i = 0; i < context.watch<Profile>().sets[index][exerciseIndex].length; i++)
+                                                      Text(
+                                                        "${context.watch<Profile>().sets[index][exerciseIndex][i].numSets} x (${context.watch<Profile>().sets[index][exerciseIndex][i].setLower}-${context.watch<Profile>().sets[index][exerciseIndex][i].setUpper})",
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.w700,
                                                         ),
                                                       ),
-                                                  ]
+                                                  ],
                                                 ),
                                               ),
-                                            ),
                                           ],
                                         ),
                                         
@@ -686,12 +845,26 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                       ),
                     ]),
               ),
+            ),
+                    if (todaysWorkout)
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 4,
+                          color: _stripeColor(context, index),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             )),
       );
       } else{
       return Padding(
           key: ValueKey(context.watch<Profile>().split[index]),
-          padding: EdgeInsets.only(
+          padding: const EdgeInsets.only(
             left: 8,
             right: 8,
             top: 8
@@ -699,36 +872,40 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
 
           child: Container(
             decoration: BoxDecoration(
-              
+
               border: Border.all(
                 color: widget.theme.colorScheme.outline,
                 width: 0.5
               ),
               boxShadow: [
-                todaysWorkout
-                    ? BoxShadow(
-                        color: Color(context.watch<Profile>().split[index].dayColor),
-                        offset: const Offset(2, 2),
-                        blurRadius: 4.0,
-                      )
-                    : BoxShadow(
-                        color: widget.theme.colorScheme.shadow,
-                        offset: const Offset(2, 2),
-                        blurRadius: 4.0,
-                      ),
-
-                  // BoxShadow(
-                  //   color: lighten(widget.theme.colorScheme.shadow, 20),
-                  //   offset: const Offset(-2, -2),
-                  //   blurRadius: 4.0,
-                  // ),
+                BoxShadow(
+                  color: widget.theme.colorScheme.shadow,
+                  offset: const Offset(2, 2),
+                  blurRadius: 4.0,
+                ),
               ],
               color: widget.theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(12.0),
             ),
-          
-            //defining the inside of the actual box, display information
-            child: Theme(
+
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12.0),
+              child: Stack(
+                children: [
+                  if (todaysWorkout)
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 4,
+                      child: Container(
+                        color: _stripeColor(context, index),
+                      ),
+                    ),
+                  Padding(
+                    padding: EdgeInsets.only(left: todaysWorkout ? 4 : 0),
+                    //defining the inside of the actual box, display information
+                    child: Theme(
               data: Theme.of(context).copyWith(
                 splashColor: Colors.transparent,
                 dividerColor: Colors.transparent,
@@ -739,48 +916,51 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                   horizontalTitleGap: 0,
                 ),
               ),
-          
+
               //expandable to see exercises and sets for that day
               child: ExpansionTile(
-                
+
                   controller: _expansionControllers[index],
                   key: ValueKey(context.watch<Profile>().split[index]),
                   onExpansionChanged: (isExpanded) {
                     if (isExpanded){
-                      setState(() {
-                        for (int i = 0; i < _expansionControllers.length; i++) {
-                          if (i != index) {
-                            _expansionControllers[i].collapse();
-                          }
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() {
+                            for (int i = 0; i < _expansionControllers.length; i++) {
+                              if (i != index) {
+                                _expansionControllers[i].collapse();
+                              }
+                            }
+                          });
                         }
                       });
                     }
                   },
-                  initiallyExpanded: todaysWorkout,
-                  //initiallyExpanded: toExpand(index),
-                  //controller: context.watch<Profile>().controllers[index],
+                  // Don't force-expand a day that's already been done today (#15)
+                  initiallyExpanded: todaysWorkout && !_todayComplete,
                   iconColor: widget.theme.colorScheme.onSurface,
                   collapsedIconColor: widget.theme.colorScheme.onSurface,
 
                   leading: Padding(
                     padding: const EdgeInsets.only(left: 8.0),
-                    child: Row( 
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         SizedBox(
-                          //width: 50,
+                          width: 42,
                           child: Text(
-                            "${index + 1}",
-                                                  
+                            _weekdayForDay(index),
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               height: 0.6,
                               color: widget.theme.colorScheme.onSurface,
-                              fontSize: 35,
+                              fontSize: 13,
                               fontWeight: FontWeight.w900,
                             ),
                             ),
                         ),
-                    
+
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: Container(
@@ -790,7 +970,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                               shape: BoxShape.circle,
                               color: Color(context.watch<Profile>().split[index].dayColor),
                             ),
-                          
+
                           ),
                         ),
                       ]
@@ -903,7 +1083,9 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                   .length) {
                             return Padding(
                               padding: const EdgeInsets.all(8),
-                              child: todaysWorkout
+                              child: (todaysWorkout && _todayComplete)
+                                  ? _buildCompletedButton(context, index)
+                                  : todaysWorkout
                                   ? AnimatedBuilder(
                                       animation: _pulseController,
                                       builder: (context, child) {
@@ -947,7 +1129,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                                 setWorkout = await confirmNewWorkout(context);
                                               }
               
-                                              //debugPrint("setit: $setWorkout");
+                                              ////debugPrint("setit: $setWorkout");
               
                                               // If user did not select back, then we start it
                                               if (setWorkout == true){ // User confirmed to start new (or no old one active)
@@ -1000,7 +1182,7 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                                 setWorkout = await confirmNewWorkout(context);
                                               }
               
-                                              //debugPrint("setit: $setWorkout");
+                                              ////debugPrint("setit: $setWorkout");
               
                                               // If user did not select back, then we start it
                                               if (setWorkout == true){ // User confirmed to start new (or no old one active)
@@ -1038,49 +1220,35 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                            Align(
-                                              alignment: Alignment.topLeft,
+                                            Expanded(
                                               child: Padding(
                                                 padding: const EdgeInsets.all(6.0),
-                                                child: SizedBox(
-                                                  width: MediaQuery.sizeOf(context).width - 172,
-                                                  child: Text(
-                                                    overflow: TextOverflow.visible,
-                                                    //softWrap: true,
-                                                    context.watch<Profile>().exercises[index][exerciseIndex].exerciseTitle,
-                                                    style: TextStyle(
-                                                      color: widget.theme.colorScheme.onSurface,
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
+                                                child: Text(
+                                                  overflow: TextOverflow.ellipsis,
+                                                  context.watch<Profile>().exercises[index][exerciseIndex].exerciseTitle,
+                                                  style: TextStyle(
+                                                    color: widget.theme.colorScheme.onSurface,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                            SizedBox(
-                                            height: context.watch<Profile>().sets[index][exerciseIndex].length * 20 + 16,
-                                            width: 100,
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(8.0),
-                                              child: ListView(
-                                                physics: const NeverScrollableScrollPhysics(),
+                                            Padding(
+                                              padding: const EdgeInsets.all(6.0),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.end,
                                                 children: [
-                                                  for(int i = 0; i < context.watch<Profile>().sets[index][exerciseIndex].length; i++) 
-                                                    Padding(
-                                                      padding: const EdgeInsets.only(right: 24.0),
-                                                      child: Center(
-                                                        child: Text(
-                                                          "${context.watch<Profile>().sets[index][exerciseIndex][i].numSets} x (${context.watch<Profile>().sets[index][exerciseIndex][i].setLower}-${context.watch<Profile>().sets[index][exerciseIndex][i].setUpper})",
-                                                          style: const TextStyle(
-                                                            fontWeight: FontWeight.w700,
-                                                          )
-                                                          ),
+                                                  for (int i = 0; i < context.watch<Profile>().sets[index][exerciseIndex].length; i++)
+                                                    Text(
+                                                      "${context.watch<Profile>().sets[index][exerciseIndex][i].numSets} x (${context.watch<Profile>().sets[index][exerciseIndex][i].setLower}-${context.watch<Profile>().sets[index][exerciseIndex][i].setUpper})",
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.w700,
                                                       ),
                                                     ),
-                                                ]
+                                                ],
                                               ),
                                             ),
-                                          ),
                                         ],
                                       ),
                                       
@@ -1094,6 +1262,10 @@ class WorkoutSelectionPageState extends State<WorkoutSelectionPage>
                       ),
                     ),
                   ]),
+            ),
+                  ),
+                ],
+              ),
             ),
           ));
         }

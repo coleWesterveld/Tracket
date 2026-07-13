@@ -51,15 +51,41 @@ class _PageViewWithIndicatorState extends State<PageViewWithIndicator> {
     setState(() {});
   }
 
+  // A PageView forces one shared height across all pages, so we size it to the
+  // TALLEST day (the one with the most exercises) rather than a hardcoded box that
+  // clipped longer days (#14). Past the cap, a day's list scrolls internally.
+  static const double _rowHeight = 30.0;        // one ExerciseProgressRow
+  static const double _dayHeaderHeight = 44.0;  // title row + spacer
+  static const double _dayChrome = 24.0;        // card padding + margins
+  static const double _minPageHeight = 180.0;
+  static const double _maxPageHeight = 460.0;   // sane cap so it can't grow unbounded
+
+  double _pageHeightFor(List<List<Exercise>> exercisesPerDay, int dayCount) {
+    int mostExercises = 0;
+    for (int i = 0; i < dayCount && i < exercisesPerDay.length; i++) {
+      if (exercisesPerDay[i].length > mostExercises) {
+        mostExercises = exercisesPerDay[i].length;
+      }
+    }
+    final double needed =
+        _dayHeaderHeight + _dayChrome + (mostExercises * _rowHeight);
+    return needed.clamp(_minPageHeight, _maxPageHeight);
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = context.read<Profile>();
     final days = profile.split;
     final exercisesPerDay = profile.exercises;
 
+    final double pageHeight = _pageHeightFor(exercisesPerDay, days.length);
+
     return Column(
+      // Self-sizing so the enclosing "Last 7 Days" card grows to fit (#14)
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
+        SizedBox(
+          height: pageHeight,
           child: PageView.builder(
             controller: _pageController,
             itemCount: days.length,
@@ -134,8 +160,8 @@ class _DayProgressState extends State<DayProgress> {
             ),
           ]
         ),
-        width: 200,
-        height: 200,
+        // No fixed 200x200 box — the page fills the shared height computed by
+        // PageViewWithIndicator, so longer days are no longer clipped (#14).
         child: Padding(
           padding: const EdgeInsets.all(8.0),
           child: Column(

@@ -45,26 +45,18 @@ Add a "Random Stat of the Day" widget that shows:
 
 import 'package:firstapp/app_tutorial/app_tutorial_keys.dart';
 import 'package:firstapp/app_tutorial/tutorial_manager.dart';
-import 'package:firstapp/widgets/history_session_view.dart';
 import 'package:firstapp/widgets/target_weight_dialog.dart';
 import 'package:firstapp/widgets/weekly_progress.dart';
 import 'package:flutter/material.dart';
 import 'package:showcaseview/showcaseview.dart';
 import '../database/database_helper.dart';
-import 'package:fl_chart/fl_chart.dart';
 import "../providers_and_settings/program_provider.dart";
 import 'package:provider/provider.dart';
-import 'dart:math';
-import 'package:smooth_page_indicator/smooth_page_indicator.dart';
-import '../other_utilities/lightness.dart';
 import '../widgets/exercise_search.dart';
 import '../widgets/exercise_progress_chart.dart';
 import '../database/profile.dart';
 import '../widgets/info_popup.dart';
-import '../providers_and_settings/settings_page.dart';
-import 'package:firstapp/other_utilities/format_weekday.dart';
 import 'package:firstapp/widgets/exercise_history_list.dart';
-import 'package:firstapp/widgets/circular_progress.dart';
 import 'package:firstapp/widgets/goal_progress.dart';
 import 'package:firstapp/other_utilities/timespan.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
@@ -116,6 +108,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    
+    // Refresh goals when page becomes visible to show updated progress
+    _fetchGoals(useMetric: context.read<SettingsModel>().useMetric);
     
     // Check if there's a pending exercise to display from workout page
     final uiState = context.read<UiStateProvider>();
@@ -325,7 +320,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   // Callback when an exercise is selected - get history from the database
   void _handleExerciseSelected(Map<String, dynamic> exercise) async {
-    //debugPrint("ran");
+    ////debugPrint("ran");
     _loadExerciseHistory(exercise);
   }
 
@@ -371,26 +366,44 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
-  // calculates one rep max based off of last logged set from the database
+  // calculates one rep max based off of top set from last session from the database
   Future<double> _calculateCurrentOneRm(int exerciseId) async {
 
     final db = await DatabaseHelper.instance.database;
-    final recentSet = await db.query(
+    
+    // First, get the most recent session_id for this exercise
+    final recentSession = await db.query(
       'set_log',
+      columns: ['session_id'],
       where: 'exercise_id = ?',
       whereArgs: [exerciseId],
-      orderBy: 'date DESC',
+      orderBy: 'datetime(date) DESC',
       limit: 1,
     );
 
-    if (recentSet.isEmpty) return 0;
+    if (recentSession.isEmpty) return 0;
     
+    final sessionId = recentSession.first['session_id'] as String;
     
-    final weight = recentSet.first['weight'] as double;
-    final reps = (recentSet.first['reps'] as double);
+    // Now get the set with the highest calculated 1RM from that session
+    final topSet = await db.rawQuery('''
+      SELECT weight, reps, rpe,
+             (weight * (1.0 + (reps + (10.0 - rpe)) / 30.0)) AS calculated_1rm
+      FROM set_log
+      WHERE exercise_id = ? AND session_id = ?
+      ORDER BY calculated_1rm DESC
+      LIMIT 1
+    ''', [exerciseId, sessionId]);
 
-    // Formula to estimate 1 rep max
-    return (weight * (1 + reps / 30));
+    if (topSet.isEmpty) return 0;
+    
+    final weight = topSet.first['weight'] as double;
+    final reps = topSet.first['reps'] as double;
+    final rpe = topSet.first['rpe'] as double;
+
+    // Formula to estimate 1 rep max with RPE adjustment
+    // Accounts for reps in reserve: reps + (10 - rpe)
+    return weight * (1 + (reps + (10 - rpe)) / 30);
   }
 
   // Build the exercise history view.
@@ -463,7 +476,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   // List of Goal widgets, tappable to edit/delete
   List<Widget> _buildGoalList() {
-    //debugPrint("${((MediaQuery.sizeOf(context).width - 48)~/2 - 1).floorToDouble()}");
+    ////debugPrint("${((MediaQuery.sizeOf(context).width - 48)~/2 - 1).floorToDouble()}");
     return _goals.map((goal) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
       child: GestureDetector(
@@ -711,7 +724,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         )
       ],
               child: Container(
-                height: 325,
+                // No fixed height: the card now grows to fit the day with the most
+                // exercises (PageViewWithIndicator computes a shared, capped page
+                // height internally), instead of clipping at 325px (#14).
                 width: double.infinity,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
@@ -736,6 +751,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: Column(
+                    // min: let the card size itself to its content (#14)
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const Align(
                         alignment: Alignment.topCenter,
@@ -750,20 +767,19 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           ),
                         ),
                       ),
-                      Expanded(
-                        // Displays progress on exercises during past week workout
-                        child: PageViewWithIndicator(
-                          theme: widget.theme,
-                          onSelected: (exercise){
-                            setState(() {
-                              _exercise = exercise.toMap();
-                              uiState.isDisplayingChart = true;
-                            });
-                            _handleExerciseSelected(exercise.toMap());
-              
-                           // _exerciseHistory = _handleExerciseSelected(exercise.toMap());
-                          }
-                       )
+                      // Displays progress on exercises during past week workout.
+                      // Self-sizing: no Expanded, since the parent is now unbounded.
+                      PageViewWithIndicator(
+                        theme: widget.theme,
+                        onSelected: (exercise){
+                          setState(() {
+                            _exercise = exercise.toMap();
+                            uiState.isDisplayingChart = true;
+                          });
+                          _handleExerciseSelected(exercise.toMap());
+
+                         // _exerciseHistory = _handleExerciseSelected(exercise.toMap());
+                        }
                       ),
                     ],
                   )

@@ -30,21 +30,9 @@ class _PopUpDayEditorState extends State<PopUpDayEditor> {
   // For day-editor slider - false is editing title/equipment, true is editing colour
   bool? _sliding = false;
 
-  @override
-  void initState() {
-    super.initState();
-    // Initialize text selection for both fields
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.titleTEC.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: widget.titleTEC.text.length,
-      );
-      widget.equipmentTEC.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: widget.equipmentTEC.text.length,
-      );
-    });
-  }
+  // NOTE: the manual TextSelection-on-first-frame block that used to live in
+  // initState is gone — both fields now use `selectAllOnFocus: true`, which is
+  // the app's standard pattern (see display_set.dart) and handles this natively.
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +86,7 @@ class _PopUpDayEditorState extends State<PopUpDayEditor> {
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: TextFormField(
-                // selectAllOnFocus: true,
+                selectAllOnFocus: true,
                 maxLength: 50,
                 onFieldSubmitted: (value) {
                   if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();

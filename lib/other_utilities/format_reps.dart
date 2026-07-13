@@ -13,3 +13,12 @@ String formatReps(double reps) {
 String formatWeight(double reps) {
   return reps % 1 == 0 ? reps.toInt().toString() : reps.toString();
 }
+
+// Formats a planned rep target. When the user has chosen a single exact number
+// (lower == upper) we show just that number, otherwise we show the range.
+// ie.:
+// (3, 3) -> '3'
+// (5, 8) -> '5-8'
+String formatRepRange(int lower, int upper) {
+  return lower == upper ? '$lower' : '$lower-$upper';
+}

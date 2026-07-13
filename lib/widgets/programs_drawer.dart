@@ -1,36 +1,202 @@
 // Side drawer to edit, select and add programs
 
+import 'package:firstapp/data_io/data_export_import.dart';
+import 'package:firstapp/data_io/starter_programs.dart';
 import 'package:firstapp/database/database_helper.dart';
 import 'package:firstapp/database/profile.dart';
 import 'package:firstapp/providers_and_settings/program_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class ProgramsDrawer extends StatelessWidget {
+class ProgramsDrawer extends StatefulWidget {
   final int currentProgramId;
   final Function(Program) onProgramSelected;
-  final DatabaseHelper dbHelper = DatabaseHelper.instance;
   final ThemeData theme;
-  //final String debugText;
 
-  ProgramsDrawer({
+  const ProgramsDrawer({
     required this.currentProgramId,
     required this.onProgramSelected,
     required this.theme,
-    //required this.debugText,
     super.key,
   });
+
+  @override
+  State<ProgramsDrawer> createState() => _ProgramsDrawerState();
+}
+
+class _ProgramsDrawerState extends State<ProgramsDrawer> {
+  final DatabaseHelper dbHelper = DatabaseHelper.instance;
+  static const _drawerHintKey = 'programs_drawer_hint_shown';
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeShowHint();
+  }
+
+  Future<void> _maybeShowHint() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_drawerHintKey) == true) return;
+
+    await prefs.setBool(_drawerHintKey, true);
+
+    if (!mounted) return;
+
+    // Show after a short delay so the drawer is fully open
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Programs', textAlign: TextAlign.center),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.touch_app, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Tap a program to switch to it')),
+              ],
+            ),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.delete_outline, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Hold down on a program to delete it')),
+              ],
+            ),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.file_download, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Import programs shared by friends or browse starter templates')),
+              ],
+            ),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.file_upload, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Share your programs with others')),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<List<Program>> _fetchPrograms() async {
     final programMaps = await dbHelper.fetchPrograms();
     return programMaps.map((map) => Program.fromMap(map)).toList();
   }
 
+  Future<void> _importProgram() async {
+    final result = await DataExportImport.importProgram();
+    if (!mounted) return;
+
+    if (result.success && result.programId != null) {
+      final newProgram = await dbHelper.fetchProgramById(result.programId!);
+      widget.onProgramSelected(newProgram);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('"${newProgram.programTitle}" imported!')),
+        );
+        setState(() {}); // refresh the list
+      }
+    } else if (!result.cancelled && result.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: ${result.errorMessage}')),
+      );
+    }
+  }
+
+  Future<void> _exportProgram(int programId, BuildContext buttonContext) async {
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    final origin = box != null
+        ? box.localToGlobal(Offset.zero) & box.size
+        : null;
+    try {
+      await DataExportImport.exportProgram(programId, sharePositionOrigin: origin);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
+  void _showStarterPrograms() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Starter Programs',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                'Add a pre-built program to get started quickly. You can customize it after.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...StarterPrograms.templates.map((template) => ListTile(
+              leading: const Icon(Icons.fitness_center),
+              title: Text(template.title),
+              subtitle: Text('${template.daysPerWeek} days/week — ${template.description}'),
+              onTap: () async {
+                Navigator.pop(context); // close bottom sheet
+                final result = await StarterPrograms.addProgram(template);
+                if (!mounted) return;
+
+                if (result.success && result.programId != null) {
+                  final newProgram = await dbHelper.fetchProgramById(result.programId!);
+                  widget.onProgramSelected(newProgram);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('"${template.title}" added!')),
+                    );
+                    setState(() {});
+                  }
+                } else if (result.errorMessage != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed: ${result.errorMessage}')),
+                  );
+                }
+              },
+            )),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Drawer(
-        backgroundColor: theme.colorScheme.surface,
+        backgroundColor: widget.theme.colorScheme.surface,
         child: FutureBuilder<List<Program>>(
           future: _fetchPrograms(),
           builder: (context, snapshot) {
@@ -41,30 +207,27 @@ class ProgramsDrawer extends StatelessWidget {
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return const Center(child: Text('No programs found'));
             }
-      
+
             final programs = snapshot.data!;
-            // TODO: when In debug, wrap with singlechildscrollview
             return Column(
               children: [
                  DrawerHeader(
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
+                    color: widget.theme.colorScheme.surface,
                   ),
-                  
+
                   child: Center(
                     child: Text(
                       'Your Programs',
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface,
+                        color: widget.theme.colorScheme.onSurface,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
-                //Text("debug: ${debugText}"),
-                  
-                // TODO: when removing debug, wrap with expanded
+
                 Expanded(
                   child: ListView.builder(
                     shrinkWrap: true,
@@ -72,37 +235,47 @@ class ProgramsDrawer extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final program = programs[index];
                       return ListTile(
-                        // leading: Icon(
-                        //   Icons.fitness_center, 
-                        //   color: theme.colorScheme.onSurface,
-                        // ),
-                  
                         title: Row(
                           children: [
                             Expanded(
                               child: Text(
                                 program.programTitle,
                                 style: TextStyle(
-                                  color: theme.colorScheme.onSurface
+                                  color: widget.theme.colorScheme.onSurface
                                 ),
                               ),
                             ),
-                            if (program.programID == currentProgramId) 
-                              IconButton(
-                                icon: Icon(
-                                  Icons.edit, 
-                                  color: theme.colorScheme.onSurface, 
-                                  size: 20
-                                ),
-                  
-                                onPressed: () => _showEditProgramDialog(context, program),
+                            if (program.programID == widget.currentProgramId)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Builder(
+                                    builder: (btnContext) => IconButton(
+                                      icon: Icon(
+                                        Icons.file_upload_outlined,
+                                        color: widget.theme.colorScheme.onSurface,
+                                        size: 20,
+                                      ),
+                                      tooltip: 'Share this program',
+                                      onPressed: () => _exportProgram(program.programID, btnContext),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.edit,
+                                      color: widget.theme.colorScheme.onSurface,
+                                      size: 20
+                                    ),
+                                    onPressed: () => _showEditProgramDialog(context, program),
+                                  ),
+                                ],
                               ),
                           ],
                         ),
-                        selected: program.programID == currentProgramId,
-                        selectedTileColor: theme.colorScheme.outline,
+                        selected: program.programID == widget.currentProgramId,
+                        selectedTileColor: widget.theme.colorScheme.outline,
                         onTap: () {
-                          onProgramSelected(program);
+                          widget.onProgramSelected(program);
                           Navigator.pop(context);
                         },
                         onLongPress: () {
@@ -129,6 +302,7 @@ class ProgramsDrawer extends StatelessWidget {
                                     onPressed: () {
                                       Navigator.of(dialogContext).pop();
                                       context.read<Profile>().deleteProgram(programs[index].programID);
+                                      setState(() {});
                                     },
                                   ),
                                 ],
@@ -140,24 +314,45 @@ class ProgramsDrawer extends StatelessWidget {
                     },
                   ),
                 ),
-                  
-                Divider(color: theme.colorScheme.outline),
-                  
+
+                Divider(color: widget.theme.colorScheme.outline),
+
                 ListTile(
-                  
                   leading: Icon(
-                    Icons.add, 
-                    color: theme.colorScheme.onSurface
+                    Icons.add,
+                    color: widget.theme.colorScheme.onSurface
                   ),
-                
                   title: Text(
                     'Create New Program',
-                    style: TextStyle(color: theme.colorScheme.onSurface),
+                    style: TextStyle(color: widget.theme.colorScheme.onSurface),
                   ),
-                
                   onTap: () {
                     showCreateProgramDialog(context);
                   },
+                ),
+
+                ListTile(
+                  leading: Icon(
+                    Icons.download,
+                    color: widget.theme.colorScheme.onSurface,
+                  ),
+                  title: Text(
+                    'Import Program',
+                    style: TextStyle(color: widget.theme.colorScheme.onSurface),
+                  ),
+                  onTap: _importProgram,
+                ),
+
+                ListTile(
+                  leading: Icon(
+                    Icons.library_books,
+                    color: widget.theme.colorScheme.onSurface,
+                  ),
+                  title: Text(
+                    'Starter Programs',
+                    style: TextStyle(color: widget.theme.colorScheme.onSurface),
+                  ),
+                  onTap: _showStarterPrograms,
                 ),
               ],
             );
@@ -169,17 +364,18 @@ class ProgramsDrawer extends StatelessWidget {
 
   void _showEditProgramDialog(BuildContext context, Program program) {
     final programNameController = TextEditingController(text: program.programTitle);
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Edit Program'),
         content: TextField(
           controller: programNameController,
+          selectAllOnFocus: true,
           decoration: const InputDecoration(hintText: 'Enter new program name'),
         ),
         actions: [
-          
+
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
@@ -191,19 +387,19 @@ class ProgramsDrawer extends StatelessWidget {
                 final updatedProgram = program.copyWith(
                   newTitle: programNameController.text
                 );
-                
+
                 // Update program in database
                 await dbHelper.updateProgram(updatedProgram);
-                
+
                 // If editing current program, update the selection
-                if (program.programID == currentProgramId) {
-                  onProgramSelected(updatedProgram);
+                if (program.programID == widget.currentProgramId) {
+                  widget.onProgramSelected(updatedProgram);
                 }
-                
+
                 if (context.mounted){
                   Navigator.pop(context);
                 }
-                
+
               }
             },
             child: const Text('Save'),
@@ -217,7 +413,7 @@ class ProgramsDrawer extends StatelessWidget {
 
   void showCreateProgramDialog(BuildContext context) {
     final programNameController = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -226,6 +422,7 @@ class ProgramsDrawer extends StatelessWidget {
         content: TextField(
           controller: programNameController,
           autofocus: true,
+          selectAllOnFocus: true,
           decoration: const InputDecoration(hintText: 'Enter program name'),
         ),
 
@@ -241,13 +438,13 @@ class ProgramsDrawer extends StatelessWidget {
                 final id = await dbHelper.insertProgram(
                   programNameController.text,
                 );
-                
+
                 final newProgram = Program(
                   programID: id,
                   programTitle: programNameController.text,
                 );
-                
-                onProgramSelected(newProgram);
+
+                widget.onProgramSelected(newProgram);
 
                 if (context.mounted){
                   Navigator.pop(context);
