@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tracket — Workout Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <div class="logo">Tracket</div>
+      <nav>
+        <a href="#support">Support</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#terms">Terms</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <h1>Your gym notebook,<br/>in your pocket.</h1>
+      <p>Track reps, sets, and progress — free, simple, and always with you.</p>
+      <a class="app-store-btn" href="https://apps.apple.com" target="_blank">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        Download on the App Store
+      </a>
+    </div>
+  </section>
+
+  <section id="support" class="section">
+    <div class="section-inner">
+      <h2>Support</h2>
+      <p>
+        Having an issue or want to suggest a feature? I'd love to hear from you.
+        Tracket is a solo-built app and your feedback directly shapes what gets built next.
+      </p>
+      <div class="contact-card">
+        <div class="contact-item">
+          <span class="label">Email</span>
+          <a href="mailto:colewesterveld@gmail.com">colewesterveld@gmail.com</a>
+        </div>
+        <div class="contact-item">
+          <span class="label">GitHub</span>
+          <a href="https://github.com/coleWesterveld/Tracket" target="_blank">Open an issue on GitHub</a>
+        </div>
+      </div>
+      <p class="small">I aim to respond within a few days. For bugs, including your iOS version and a short description of what happened is really helpful.</p>
+    </div>
+  </section>
+
+  <section id="privacy" class="section alt">
+    <div class="section-inner">
+      <h2>Privacy Policy</h2>
+      <p class="effective-date">Effective date: April 15, 2026</p>
+
+      <h3>Overview</h3>
+      <p>
+        Tracket is built on a simple principle: your data is yours. Everything you log in
+        Tracket — your workouts, programs, sets, reps, and notes — is stored locally on
+        your device and never leaves it. We do not collect, transmit, or store any personal
+        information on external servers.
+      </p>
+
+      <h3>Information We Collect</h3>
+      <p><strong>We collect no personal information.</strong> Specifically:</p>
+      <ul>
+        <li>We do not collect your name, email address, or any account credentials.</li>
+        <li>We do not collect health or fitness data from Apple Health or any other source.</li>
+        <li>We do not use analytics, crash reporting, or any third-party tracking SDKs.</li>
+        <li>We do not use cookies or any web tracking technologies.</li>
+        <li>We do not access your location, contacts, camera, or microphone.</li>
+      </ul>
+
+      <h3>Data Storage</h3>
+      <p>
+        All data you enter into Tracket is stored locally in a SQLite database on your
+        device using Flutter's local storage. This data is subject to your device's standard
+        backup policies (e.g. iCloud backup) if you have those enabled — this is outside
+        our control and governed by Apple's privacy practices.
+      </p>
+      <p>
+        When you delete the app, all locally stored data is permanently removed from your device.
+      </p>
+
+      <h3>Program Sharing</h3>
+      <p>
+        If you choose to share a program with another user, the sharing mechanism is
+        performed directly between devices (e.g. via a share sheet). We do not operate
+        servers that receive, store, or process this data.
+      </p>
+
+      <h3>Third-Party Services</h3>
+      <p>
+        Tracket does not integrate with or transmit data to any third-party services,
+        advertisers, or analytics platforms.
+      </p>
+
+      <h3>Children's Privacy</h3>
+      <p>
+        Tracket does not knowingly collect any information from children under 13. Since
+        we collect no information from anyone, this applies equally to all users.
+      </p>
+
+      <h3>Changes to This Policy</h3>
+      <p>
+        If this policy changes in a material way (e.g. if a future version adds any
+        data collection), we will update this page and revise the effective date. We
+        encourage you to review this page periodically.
+      </p>
+
+      <h3>Contact</h3>
+      <p>
+        Questions about this privacy policy? Email us at
+        <a href="mailto:colewesterveld@gmail.com">colewesterveld@gmail.com</a>.
+      </p>
+    </div>
+  </section>
+
+  <section id="terms" class="section">
+    <div class="section-inner">
+      <h2>Terms of Service</h2>
+      <p class="effective-date">Effective date: April 15, 2026</p>
+
+      <h3>Acceptance</h3>
+      <p>
+        By downloading or using Tracket ("the App"), you agree to these Terms of Service.
+        If you do not agree, please do not use the App.
+      </p>
+
+      <h3>Use of the App</h3>
+      <p>
+        Tracket is provided for personal, non-commercial use as a workout logging tool.
+        You agree not to misuse the App, attempt to reverse-engineer it beyond what is
+        permitted by its open-source license, or use it in any unlawful way.
+      </p>
+
+      <h3>No Warranty</h3>
+      <p>
+        Tracket is provided <strong>"as is"</strong> without warranty of any kind, express
+        or implied. We make no guarantees that the App will be error-free, uninterrupted,
+        or free of bugs. Use it at your own discretion.
+      </p>
+
+      <h3>Limitation of Liability</h3>
+      <p>
+        To the fullest extent permitted by applicable law, the developer of Tracket shall
+        not be liable for any indirect, incidental, special, consequential, or punitive
+        damages, including but not limited to loss of data, loss of profits, or any injury
+        arising from your use of the App.
+      </p>
+      <p>
+        In particular, Tracket is not a medical or fitness professional service. Nothing
+        in the App constitutes medical advice. Always consult a qualified professional
+        before starting a new exercise program.
+      </p>
+
+      <h3>Data Loss</h3>
+      <p>
+        Since all data is stored locally on your device, we are not responsible for any
+        loss of workout data resulting from deleting the App, device failure, OS updates,
+        or any other cause. We strongly recommend periodically exporting your data using
+        the built-in export feature.
+      </p>
+
+      <h3>Open Source</h3>
+      <p>
+        Tracket's source code is publicly available on GitHub under its respective open-source
+        license. Your use of the App is also subject to the terms of that license.
+      </p>
+
+      <h3>Changes to Terms</h3>
+      <p>
+        We reserve the right to update these terms at any time. Continued use of the App
+        after changes are posted constitutes acceptance of the updated terms.
+      </p>
+
+      <h3>Governing Law</h3>
+      <p>
+        These terms are governed by the laws of the Province of Ontario, Canada, without
+        regard to its conflict of law provisions.
+      </p>
+
+      <h3>Contact</h3>
+      <p>
+        Questions about these terms? Email us at
+        <a href="mailto:colewesterveld@gmail.com">colewesterveld@gmail.com</a>.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-inner">
+      <span>© 2026 Tracket. All rights reserved.</span>
+      <div class="footer-links">
+        <a href="#privacy">Privacy Policy</a>
+        <a href="#terms">Terms of Service</a>
+        <a href="#support">Support</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
