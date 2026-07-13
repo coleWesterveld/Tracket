@@ -59,6 +59,9 @@ dependencies:
   confetti: ^0.8.0
   skeletonizer: ^2.0.1
   flutter_launcher_icons: ^0.14.4
+  share_plus: ^10.1.4
+  file_picker: ^8.1.7
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

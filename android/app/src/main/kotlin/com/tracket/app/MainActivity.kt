@@ -1,4 +1,4 @@
-package com.example.firstapp
+package com.tracket.app
 
 import io.flutter.embedding.android.FlutterActivity
 
