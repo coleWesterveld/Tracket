@@ -1,7 +1,5 @@
 // Some helpers to load events (workouts) for the calendar
 
-import 'package:firstapp/database/database_helper.dart';
-import 'package:firstapp/database/profile.dart';
 import 'package:firstapp/providers_and_settings/program_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -27,16 +25,17 @@ List<Event> getWorkoutForDay ({required DateTime day, required BuildContext cont
   startDay = context.read<Profile>().origin;
 
   for (var splitDay = 0; splitDay < context.read<Profile>().split.length; splitDay ++){
-    // if days between origin and day is equal to dayorder
+    final programDay = context.read<Profile>().split[splitDay];
+    if (programDay.isTemporary) continue; // skip free workout days
 
-    if (daysBetween(startDay , day) % context.read<Profile>().splitLength == context.read<Profile>().split[splitDay].dayOrder) {
+    if (daysBetween(startDay , day) % context.read<Profile>().splitLength == programDay.dayOrder) {
       return [
         Event(
-          context.read<Profile>().split[splitDay].dayTitle, 
-          splitDay, 
-          context.read<Profile>().split[splitDay].workoutTime, 
+          programDay.dayTitle,
+          splitDay,
+          programDay.workoutTime,
         )
-    ];
+      ];
     }
   }
   return [];

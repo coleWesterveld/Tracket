@@ -6,7 +6,6 @@ import 'package:firstapp/other_utilities/get_rpe_colors.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:flutter/material.dart';
-import '../other_utilities/lightness.dart';
 import '../database/profile.dart';
 import 'package:provider/provider.dart';
 import 'package:firstapp/other_utilities/format_reps.dart';
@@ -48,12 +47,20 @@ class _DisplayWorkoutState extends State<DisplayWorkout> {
     // this maybe could be batched but idc
     for (final List<SetRecord> records in sets){
       assert(records.isNotEmpty, "list should exist if no records are in it, you messed up somewhere previously.");
-      exerciseTitles.add(await dbHelper.fetchExerciseTitleById(records[0].exerciseID));
-
+      try {
+        final title = await dbHelper.fetchExerciseTitleById(records[0].exerciseID);
+        exerciseTitles.add(title);
+      } catch (e) {
+        // If exercise was deleted, show a placeholder
+        //debugPrint('Error fetching exercise title for ID ${records[0].exerciseID}: $e');
+        exerciseTitles.add('[Deleted Exercise]');
+      }
     }
 
-    // debugPrint("titles: ${exerciseTitles}");
-    setState(() {});
+    // //debugPrint("titles: ${exerciseTitles}");
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override

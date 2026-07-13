@@ -8,7 +8,6 @@ import 'package:firstapp/other_utilities/get_rpe_colors.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:flutter/material.dart';
-import '../other_utilities/lightness.dart';
 import '../database/profile.dart';
 import 'package:provider/provider.dart';
 import 'package:firstapp/other_utilities/format_reps.dart';

@@ -43,6 +43,13 @@ class _ListDaysState extends State<ListDays> {
         ? AppTutorialKeys.addDayToProgramTutorial
         : AppTutorialKeys.addDayToProgram;
 
+    // Filter out temporary (one-off) days so they don't appear in the
+    // program editor. Map list positions → actual split indices.
+    final profile = context.watch<Profile>();
+    final nonTempIndices = List<int>.generate(profile.split.length, (i) => i)
+        .where((i) => !profile.split[i].isTemporary)
+        .toList();
+
     return Showcase(
       disableDefaultTargetGestures: true,
       key: showcaseKey,
@@ -66,7 +73,7 @@ class _ListDaysState extends State<ListDays> {
             color: theme.colorScheme.onSurface
           )
 
-          
+
         ),
         TooltipActionButton(
           type: TooltipDefaultActionType.next,
@@ -83,41 +90,46 @@ class _ListDaysState extends State<ListDays> {
 
       child: ReorderableListView.builder(
         shrinkWrap: true,
-        
-          // Reordering days
-          onReorder: (oldIndex, newIndex){
-            if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
-              context.read<Profile>().moveDay(
-                oldIndex: oldIndex, 
-                newIndex: newIndex, 
-                programID: context.read<Profile>().currentProgram.programID
-              );
 
-              final settings = Provider.of<SettingsModel>(context, listen: false);
-              if (settings.notificationsEnabled) {
-                final notiService = NotiService();
-                notiService.scheduleWorkoutNotifications(
-                  profile: context.read<Profile>(),
-                  settings: context.read<SettingsModel>(),
-                );
-              }
+          // Reordering days — map displayed positions to actual split indices
+          // so that any temporary day sitting at the end is never involved.
+          onReorder: (oldPos, newPos){
+            if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
+            final oldSplitIdx = nonTempIndices[oldPos];
+            final newSplitIdx = newPos < nonTempIndices.length
+                ? nonTempIndices[newPos]
+                : nonTempIndices.last + 1;
+            context.read<Profile>().moveDay(
+              oldIndex: oldSplitIdx,
+              newIndex: newSplitIdx,
+              programID: context.read<Profile>().currentProgram.programID
+            );
+
+            final settings = Provider.of<SettingsModel>(context, listen: false);
+            if (settings.notificationsEnabled) {
+              final notiService = NotiService();
+              notiService.scheduleWorkoutNotifications(
+                profile: context.read<Profile>(),
+                settings: context.read<SettingsModel>(),
+              );
+            }
           },
-          
+
           // Button at bottom to add a new day to split
           footer: Padding(
             padding: const EdgeInsets.all(8.0),
             child: Card(
               key: const ValueKey('dayAdder'),
-            
+
               color: widget.theme.colorScheme.primary,
               child: InkWell(
-              
+
                 splashColor: widget.theme.colorScheme.secondary,
                 borderRadius: BorderRadius.circular(16),
                 onTap: () {
                   if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
                   context.read<Profile>().splitAppend(context);
-                  
+
                   final settings = Provider.of<SettingsModel>(context, listen: false);
                   if (settings.notificationsEnabled) {
                     final notiService = NotiService();
@@ -125,7 +137,7 @@ class _ListDaysState extends State<ListDays> {
                       profile: context.read<Profile>(),
                       settings: context.read<SettingsModel>(),
                     );
-                  }                
+                  }
                 },
                 child: SizedBox(
                   width: double.infinity,
@@ -138,39 +150,40 @@ class _ListDaysState extends State<ListDays> {
               ),
             ),
           ),
-              
-          // Building the list of day tiles
-          itemCount: context.watch<Profile>().split.length,
+
+          // Building the list of day tiles (temporary days excluded)
+          itemCount: nonTempIndices.length,
           itemBuilder: (context, index) {
+            final splitIndex = nonTempIndices[index];
             // Swipe right-to-left to show delete option
             return Slidable(
               closeOnScroll: true,
               direction: Axis.horizontal,
-        
-              key: ValueKey(context.watch<Profile>().split[index]),
-        
+
+              key: ValueKey(context.watch<Profile>().split[splitIndex]),
+
               endActionPane: ActionPane(
                 extentRatio: 0.3,
-                motion: const ScrollMotion(), 
+                motion: const ScrollMotion(),
                 children: [
                   SlidableAction(
-                    
+
                     backgroundColor: widget.theme.colorScheme.error,
                     foregroundColor: widget.theme.colorScheme.onError,
                     icon: Icons.delete,
-        
+
                     onPressed: (direction) {
                       if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
-        
+
                       // Cache deleted data to allow undo
-                      final deletedDay = context.read<Profile>().split[index];
-                      final deletedExercises = context.read<Profile>().exercises[index];
-                      final deletedSets = context.read<Profile>().sets[index];
-        
+                      final deletedDay = context.read<Profile>().split[splitIndex];
+                      final deletedExercises = context.read<Profile>().exercises[splitIndex];
+                      final deletedSets = context.read<Profile>().sets[splitIndex];
+
                       // Delete the data
-                      context.read<Profile>().splitPop(index: index, context: context);   
-        
-                      // Display snackbar with undo option 
+                      context.read<Profile>().splitPop(index: splitIndex, context: context);
+
+                      // Display snackbar with undo option
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
@@ -179,22 +192,22 @@ class _ListDaysState extends State<ListDays> {
                             ),
                             'Day Deleted'
                           ),
-        
+
                           action: SnackBarAction(
                             label: 'Undo',
                             textColor: widget.theme.colorScheme.onSecondary,
                             onPressed: () {
                               try{
-                                
+
                                 context.read<Profile>().splitInsert(
-                                  index: index, 
-                                  day: deletedDay, 
-                                  exerciseList: deletedExercises, 
+                                  index: splitIndex,
+                                  day: deletedDay,
+                                  exerciseList: deletedExercises,
                                   newSets: deletedSets,
                                   context: context
                                 );
                               } catch(e){
-                                debugPrint('Undo failed: $e');
+                                //debugPrint('Undo failed: $e');
                                 // Show error message
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Failed to undo deletion :(')),
@@ -217,25 +230,25 @@ class _ListDaysState extends State<ListDays> {
                   ),
                 ],
               ),
-              
+
               // A tile representing a day
               child: Padding(
-                key: ValueKey(context.watch<Profile>().split[index]),
+                key: ValueKey(context.watch<Profile>().split[splitIndex]),
                 padding: const EdgeInsets.only(left: 8, right: 8, top: 8),
-                          
+
                 child: DayTile(
-                  context: context, 
-                  index: index,
+                  context: context,
+                  index: splitIndex,
                   theme: widget.theme,
-        
-                  onExerciseAdded: (exerciseIndex) => widget.onExerciseAdded(index, exerciseIndex)
-                
+
+                  onExerciseAdded: (exerciseIndex) => widget.onExerciseAdded(splitIndex, exerciseIndex)
+
                 )
-              ),  
+              ),
             );
           },
         ),
-      
+
     );
   }
 }

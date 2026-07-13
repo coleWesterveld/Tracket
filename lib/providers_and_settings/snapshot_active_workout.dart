@@ -7,7 +7,7 @@ but adding a separate table for this relatively short-term buffer seems overkill
 // TODO: i should maybe make something so that if like a workout just goes on for a day or more 
 // we can assume the user just forgot about it and is not actually working out that long, it just ends it or maybe just asks the user first
 
-import 'dart:convert'; // For jsonEncode/jsonDecode
+// For jsonEncode/jsonDecode
 import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
 
 // json encode/decode methods to save and load an active workout 

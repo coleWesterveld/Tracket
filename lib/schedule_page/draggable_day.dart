@@ -1,4 +1,3 @@
-import 'package:dotted_border/dotted_border.dart';
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
 //import 'package:firstapp/schedule_page.dart';
 import 'package:flutter/material.dart';
@@ -7,8 +6,6 @@ import '../providers_and_settings/program_provider.dart';
 import '../database/profile.dart';
 import 'package:provider/provider.dart';
 import '../other_utilities/lightness.dart';
-import '../other_utilities/day_of_week.dart';
-import '../providers_and_settings/settings_page.dart';
 import 'package:firstapp/schedule_page/rest_day.dart';
 
 

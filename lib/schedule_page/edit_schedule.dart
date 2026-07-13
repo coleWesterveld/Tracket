@@ -65,17 +65,15 @@ class _EditScheduleState extends State<EditSchedule> {
 
   void generateDays(){
     List<Day?> newDays = [];
-    _days = context.read<Profile>().split;
-    //(_days.toString());
+    // Exclude temporary (one-off) days — they don't belong in the schedule
+    _days = context.read<Profile>().split.where((d) => !d.isTemporary).toList();
 
     int oldIdx = 0;
     if (_days.isNotEmpty){
       for (int i = 0; i < context.read<Profile>().splitLength; i++){
-        if (oldIdx < _days.length &&_days[oldIdx]!.dayOrder == i){
+        if (oldIdx < _days.length && _days[oldIdx]!.dayOrder == i){
           newDays.add(_days[oldIdx]);
-
-          
-          oldIdx ++;
+          oldIdx++;
         }
         else{
           newDays.add(null);
@@ -184,9 +182,10 @@ class _EditScheduleState extends State<EditSchedule> {
                                         
                                         
                                         if (splitLenTEC.text.isNotEmpty){
-                                          if (int.parse(splitLenTEC.text) < context.read<Profile>().split.length){
+                                          final nonTempCount = context.read<Profile>().split.where((d) => !d.isTemporary).length;
+                                        if (int.parse(splitLenTEC.text) < nonTempCount){
                                             ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(content: Text("Length must be at least number of days in split (${context.read<Profile>().split.length})")),
+                                              SnackBar(content: Text("Length must be at least number of days in split ($nonTempCount)")),
                                             );
                                           }
                                           else{
@@ -478,7 +477,7 @@ class _EditScheduleState extends State<EditSchedule> {
                       if (!_allWorkoutsAtSameTime){
                         // only update the specific day chosen
                         // Update through provider
-                        debugPrint("timechanged 1");
+                        //debugPrint("timechanged 1");
                         context.read<Profile>().splitAssign(
                           newDay: _days[index]!.copyWith(newTime: pickedTime),
                           index: context.read<Profile>().split.indexWhere((day) => day.dayID == _days[index]!.dayID),
@@ -499,7 +498,7 @@ class _EditScheduleState extends State<EditSchedule> {
                             int splitIndex = context.read<Profile>().split.indexWhere((day) => day.dayID == _days[i]!.dayID);
 
                             if (splitIndex != -1) {
-                              debugPrint("timechanged 2");
+                              //debugPrint("timechanged 2");
                               context.read<Profile>().splitAssign(
                                 newDay: _days[i]!, 
                                 index: splitIndex,

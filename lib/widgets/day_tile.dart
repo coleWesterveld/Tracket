@@ -38,7 +38,7 @@ class _DayTileState extends State<DayTile> {
     final settings = context.watch<SettingsModel>();
     final theme = Theme.of(context);
     //final uiState = context.watch<UiStateProvider>();
-    //debugPrint("${context.read<SettingsModel>().isFirstTime}");
+    ////debugPrint("${context.read<SettingsModel>().isFirstTime}");
     //final shouldExpand = uiState.expandProgramIndex == widget.index;
 
 

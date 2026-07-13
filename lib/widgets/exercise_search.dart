@@ -63,6 +63,71 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
     widget.onSearchModeChanged?.call(false);
   }
 
+  Future<void> _deleteExercise(int exerciseId) async {
+    try {
+      await dbHelper.deleteExercise(exerciseId);
+      // Reload exercises after deletion
+      await _loadExercisesFromDatabase();
+    } catch (e) {
+      //debugPrint('Error deleting exercise: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting exercise: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showDeleteExerciseDialog(Map<String, dynamic> exercise) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Exercise"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Are you sure you want to delete ${exercise['exercise_title']}?"),
+            const SizedBox(height: 12),
+            Text(
+              "This will also delete:",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: widget.theme.colorScheme.error,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text("• All workout history for this exercise",
+                style: TextStyle(color: widget.theme.colorScheme.error)),
+            Text("• All goals for this exercise",
+                style: TextStyle(color: widget.theme.colorScheme.error)),
+            Text("• All planned sets in programs",
+                style: TextStyle(color: widget.theme.colorScheme.error)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _deleteExercise(exercise['id']);
+            },
+            child: Text(
+              "Delete",
+              style: TextStyle(color: widget.theme.colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFullScreenSearch(List<Map<String, dynamic>> filteredExercises) {
     return _showCustomMaker ? CustomExerciseForm(
       height: MediaQuery.of(context).size.height-MediaQuery.of(context).viewInsets.bottom,
@@ -145,28 +210,8 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
                         _clearSearch();
                       },
 
-                       onLongPress: () {
-                        // TODO: make this actually work idk
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: Text("Delete Exercise"),
-                            content: Text("Are you sure you want to delete ${exercise['exercise_title']}?"),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: Text("Cancel"),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  //_deleteExercise(exercise['id']); // Implement this method
-                                  Navigator.pop(context);
-                                },
-                                child: Text("Delete", style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
-                          ),
-                        );
+                      onLongPress: () {
+                        _showDeleteExerciseDialog(exercise);
                       },
                     );
                   },

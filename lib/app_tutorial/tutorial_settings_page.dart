@@ -5,7 +5,7 @@ import 'package:showcaseview/showcaseview.dart';
 import '../providers_and_settings/settings_provider.dart';
 import '../main.dart'; // To navigate to MainScaffold
 import 'app_tutorial_keys.dart';
-import 'tutorial_manager.dart'; // Import the manager
+// Import the manager
 import 'package:firstapp/workout_page/workout_selection_page.dart';
 import 'package:firstapp/notifications/notification_service.dart';
 import 'package:firstapp/providers_and_settings/program_provider.dart';
@@ -28,7 +28,7 @@ class TutorialSettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     // Access SettingsModel if you want to show initial settings here
     final settings = Provider.of<SettingsModel>(context);
-    //debugPrint("settings: ${settings.themeMode}");
+    ////debugPrint("settings: ${settings.themeMode}");
     final theme = Theme.of(context);
 
     return Scaffold(

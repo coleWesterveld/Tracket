@@ -41,8 +41,8 @@ class TutorialManager extends ChangeNotifier {
     AppTutorialKeys.addGoals
   ];
 
-  final exerciseDemoExpandController = ExpansionTileController();
-  final workoutDemoController = ExpansionTileController();
+  final exerciseDemoExpandController = ExpansibleController();
+  final workoutDemoController = ExpansibleController();
 
   int _currentStep = 0;
 
@@ -95,9 +95,9 @@ class TutorialManager extends ChangeNotifier {
 
   // Gets called for every showcase - defines flow for a single widget to showcase
   Future<void> _executeStep(BuildContext showCaseContext) async {
-    //debugPrint("Executing Tutorial Step: $_currentStep");
+    ////debugPrint("Executing Tutorial Step: $_currentStep");
     if (_currentStep >= _tutorialSequence.length) {
-      //debugPrint("dpone");
+      ////debugPrint("dpone");
       _handleTutorialCompletion(showCaseContext);
       return;
     }
@@ -124,7 +124,7 @@ class TutorialManager extends ChangeNotifier {
 
       if (targetContext != null) {
         // Widget is ready! Showcase it.
-        //debugPrint("Widget for key $currentKey found. Starting showcase.");
+        ////debugPrint("Widget for key $currentKey found. Starting showcase.");
 
         if (didNavigate) await Future.delayed(const Duration(milliseconds: 500)); // Added delay
         try {
@@ -137,7 +137,7 @@ class TutorialManager extends ChangeNotifier {
         // Widget not ready yet, retry next frame (up to a limit)
         _waitRetries++;
         if (_waitRetries <= _maxWaitRetries) {
-          //debugPrint("Widget for key $currentKey not ready yet. Retrying frame ($_waitRetries/$_maxWaitRetries)...");
+          ////debugPrint("Widget for key $currentKey not ready yet. Retrying frame ($_waitRetries/$_maxWaitRetries)...");
           // Schedule the check again for the next frame
           _waitForWidgetAndShowcase(showCaseContext, currentKey);
         } else {
@@ -186,7 +186,7 @@ class TutorialManager extends ChangeNotifier {
 
     // --- Navigation ---
     if (targetPageIndex != -1 && uiState.currentPageIndex != targetPageIndex) {
-      //debugPrint("Navigating from ${uiState.currentPageIndex} to $targetPageIndex for key $key");
+      ////debugPrint("Navigating from ${uiState.currentPageIndex} to $targetPageIndex for key $key");
       uiState.currentPageIndex = targetPageIndex;
       navigationOccurred = true; // Set the flag
 
@@ -201,7 +201,7 @@ class TutorialManager extends ChangeNotifier {
     //  if (key == AppTutorialKeys.editPrograms) {
     //    // Ensure Program Page (index 2) is active
     //    if (uiState.currentPageIndex == 2) {
-    //       debugPrint("Requesting program drawer open for editPrograms step");
+    //       //debugPrint("Requesting program drawer open for editPrograms step");
     //       // Use the robust method established earlier
     //       WidgetsBinding.instance.addPostFrameCallback((_) {
     //          // Check if main scaffold state is available before calling

@@ -1,3 +1,4 @@
+import 'package:firstapp/data_io/data_export_import.dart';
 import 'package:firstapp/notifications/notification_service.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
 import 'package:flutter/material.dart';
@@ -15,8 +16,83 @@ import 'package:firstapp/providers_and_settings/program_provider.dart';
 // Screen reader optimizations
 
 // Settings Page
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  bool _exportLoading = false;
+  bool _importLoading = false;
+
+  Future<void> _exportData(BuildContext buttonContext) async {
+    setState(() => _exportLoading = true);
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    final origin = box != null
+        ? box.localToGlobal(Offset.zero) & box.size
+        : null;
+    try {
+      await DataExportImport.exportData(sharePositionOrigin: origin);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportLoading = false);
+    }
+  }
+
+  Future<void> _importData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import Data?', textAlign: TextAlign.center),
+        content: const Text(
+          'This will replace ALL existing data (history, programs, exercises) with the data from the JSON file. This cannot be undone.\n\nTo import just a shared program without replacing your data, use "Import Program" in the programs sidebar instead.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Replace Data'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _importLoading = true);
+    try {
+      final result = await DataExportImport.importData();
+      if (!mounted) return;
+      if (result.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Data imported successfully. Please restart the app.')),
+        );
+      } else if (!result.cancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: ${result.errorMessage}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _importLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -219,10 +295,34 @@ class SettingsPage extends StatelessWidget {
               thickness: 0.5,
             ),
               // Color Blind Mode -- Yet to Be implemented
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Builder(
+                  builder: (btnContext) => ElevatedButton.icon(
+                    onPressed: _exportLoading ? null : () => _exportData(btnContext),
+                    icon: _exportLoading
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.upload),
+                    label: const Text('Export Data'),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _importLoading ? null : _importData,
+                  icon: _importLoading
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.download),
+                  label: const Text('Import Data'),
+                ),
+              ],
+            ),
+
+            const Divider(thickness: 0.5),
+
             ElevatedButton(
               onPressed: (){
                 showDialog(
-                  context: context, 
+                  context: context,
                   builder: (context) {
                     return AlertDialog(
                       title: const Text("Do an App Walkthrough?", textAlign: TextAlign.center,),

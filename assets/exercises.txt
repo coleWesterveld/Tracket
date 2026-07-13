@@ -1,4 +1,8 @@
 Weighted Tricep Dips, Triceps
+Weighted Pull-Up, Lats
+Weighted Dip, Chest
+Weighted Decline Sit-Up, Abdominals
+Weighted Chin-Up, Lats
 Upright Barbell Row, Traps
 Triceps Pushdown, Triceps
 Trap Bar Deadlift, Quadriceps
@@ -6,27 +10,41 @@ T-Bar Row, Middle Back
 Sumo Deadlift, Hamstrings
 Straight-Arm Pulldown, Lats
 Stiff-Legged Deadlift, Hamstrings
+Standing Leg Curl, Hamstrings
 Standing Calf Raise, Calf
 Spider Curl, Biceps
+Smith Machine Squat, Quadriceps
 Smith Machine Bench Press, Chest
+Sissy Squat, Quadriceps
+Single Leg Press, Quadriceps
 Seated Leg Curl, Hamstrings
-Seated Calf Raise, Calves
+Seated Calf Raise, Calf
 Seated Cable Row, Middle Back
 Russian Twist, Abdominals
 Romanian Deadlift, Hamstrings
+Reverse Lunge, Quadriceps
+Reverse Grip Lat Pulldown, Lats
 Reverse Barbell Wrist Curl, Forearms
 Reverse Barbell Curl, Forearms
 Rear Delt Flys, Shoulders
 Pullups, Lats
 Preacher Curl, Biceps
+Pendulum Squat, Quadriceps
+Pendlay Row, Middle Back
 Pec Deck Fly, Chest
 Overhead Triceps Extension, Triceps
+Machine Shoulder Press, Shoulders
+Machine Row, Middle Back
+Machine Preacher Curl, Biceps
+Machine Chest Press, Chest
 Lying Triceps Extension, Triceps
-Leg Press Calf Raise, Calves
+Lying Leg Curl, Hamstrings
 Leg Press, Quadriceps
+Leg Press Calf Raise, Calf
 Leg Extension, Quadriceps
-Leg Curl, Hamstrings
 Lat Pulldown, Lats
+Landmine Rotation, Abdominals
+Landmine Press, Chest
 JM Press, Triceps
 Incline Dumbbell Flyes, Chest
 Incline Dumbbell Curl, Biceps
@@ -39,20 +57,22 @@ Hammer Curl, Biceps
 Hack Squat, Quadriceps
 Good Morning, Hamstrings
 Goblet Squats, Quadriceps
+Glute Kickback Machine, Glutes
 Glute Bridge, Glutes
 Front Squat, Quadriceps
 Front Dumbbell Raise, Shoulders
 Farmer's Walk, Forearms
-Face Pulls, Shoulders
 Face Pull, Shoulders
 EZ-Bar Skullcrusher, Triceps
 EZ-Bar Curl, Biceps
+Dumbbell Wrist Curl, Forearms
 Dumbbell Upright Row, Traps
+Dumbbell Step Up, Quadriceps
 Dumbbell Side Bend, Abdominals
 Dumbbell Shrug, Traps
 Dumbbell Shoulder Press, Shoulders
+Dumbbell Romanian Deadlift, Hamstrings
 Dumbbell Pullover, Lats
-Dumbbell Overhead Press, Shoulders
 Dumbbell One-Arm Row, Middle Back
 Dumbbell Lunge, Quadriceps
 Dumbbell Lateral Raise, Shoulders
@@ -67,24 +87,29 @@ Crunch, Abdominals
 Concentration Curl, Biceps
 Close-Grip Lat Pulldown, Lats
 Close-Grip Bench Press, Triceps
-Close-Grip Barbell Bench Press, Triceps
 Chin-Up, Lats
+Chest Supported Row, Middle Back
+Cable Pull-Through, Glutes
+Cable Overhead Triceps Extension, Triceps
 Cable Lateral Raise, Shoulders
 Cable Front Raise, Shoulders
+Cable Curl, Biceps
 Cable Crunch, Abdominals
 Cable Chest Press, Chest
 Cable Chest Fly, Chest
 Bulgarian Split Squat, Quadriceps
 Box Squats, Quadriceps
 Bench Dip, Triceps
+Belt Squat, Quadriceps
 Barbell Wrist Curl, Forearms
 Barbell Squat, Quadriceps
 Barbell Shrug, Traps
 Barbell Overhead Press, Shoulders
 Barbell Lunge, Quadriceps
 Barbell Hip Thrust, Glutes
+Barbell Front Raise, Shoulders
 Barbell Deadlift, Lower Back
-Barbell Calf Raise, Calves
+Barbell Calf Raise, Calf
 Barbell Biceps Curl, Biceps
 Barbell Bent Over Row, Middle Back
 Barbell Bench Press, Chest

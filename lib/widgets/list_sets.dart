@@ -99,7 +99,7 @@ class _ListSetsState extends State<ListSets> {
                           );
                         });
                         } catch(e){
-                          debugPrint('Undo failed: $e');
+                          //debugPrint('Undo failed: $e');
                           // Show error message
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Failed to undo deletion :(')),

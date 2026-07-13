@@ -9,11 +9,8 @@ import 'dart:async';
 
 import 'package:firstapp/app_tutorial/app_tutorial_keys.dart';
 import 'package:firstapp/app_tutorial/tutorial_manager.dart';
-import 'package:firstapp/database/database_helper.dart';
 import 'package:firstapp/other_utilities/format_weekday.dart';
-import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:firstapp/widgets/display_workout.dart';
-import 'package:firstapp/widgets/history_session_view.dart';
 import 'package:flutter/material.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -55,7 +52,7 @@ class _MyScheduleState extends State<SchedulePage> {
   List<DateTime>? didWorkout;
 
   Future<void> loadDaysActive() async {
-    didWorkout = await context.read<Profile>().getDaysWithHistory(today.subtract(Duration(days: 43)), today);
+    didWorkout = await context.read<Profile>().getDaysWithHistory(today.subtract(const Duration(days: 43)), today);
     if (_selectedDay != null && mounted){
       loggedSets = context.read<Profile>().getSetsForDay(normalizeDay(_selectedDay!));
     }
@@ -93,7 +90,7 @@ class _MyScheduleState extends State<SchedulePage> {
 
   Widget buildLegend(){
     int crossCount = 2;
-    int numLabels = context.watch<Profile>().split.length;
+    int numLabels = context.watch<Profile>().split.where((d) => !d.isTemporary).length;
     
     Orientation orientation = MediaQuery.of(context).orientation;
     return SizedBox(
@@ -112,10 +109,11 @@ class _MyScheduleState extends State<SchedulePage> {
   }
 
   List<Widget> legendLabels(){
-     
+
 
     List<Widget> labels = [];
     for (Day day in context.watch<Profile>().split){
+      if (day.isTemporary) continue; // skip one-off workout days
       labels.add(
         Padding(
           padding: const EdgeInsets.only(left: 8.0, right: 8.0),
@@ -135,7 +133,7 @@ class _MyScheduleState extends State<SchedulePage> {
                 child: Text(
                   " ${day.dayTitle}",
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700
                   )
                 )
@@ -471,7 +469,7 @@ class _MyScheduleState extends State<SchedulePage> {
                         
                       // } else{
 
-                      //   debugPrint("sets: ${snapshot.data}");
+                      //   //debugPrint("sets: ${snapshot.data}");
 
                       //   if (snapshot.data!.isEmpty) return Text("empty");
                       //   return  
@@ -560,7 +558,7 @@ class _MyScheduleState extends State<SchedulePage> {
       }
       // if in the past, check if they completed a workout that day
       if (didWorkout!.contains(normalizeDay(day))){
-        //debugPrint("found it");
+        ////debugPrint("found it");
         return Padding(
         padding: const EdgeInsets.all(8.0),
         child: Container(

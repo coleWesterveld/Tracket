@@ -1,7 +1,6 @@
 
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
-import '../other_utilities/lightness.dart';
 
 class RestDay extends StatelessWidget {
   const  RestDay({super.key, 

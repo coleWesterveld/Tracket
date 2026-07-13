@@ -1,7 +1,6 @@
 // A small glimpse of what a week of a program might look like
 // for easy view at bottom while creating a program
 
-// TODO: make tappable => take to schedule edit page
 // TODO: location of days in week is not accurate - based on old system
 
 import 'package:flutter/material.dart';

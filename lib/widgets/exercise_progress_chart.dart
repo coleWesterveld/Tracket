@@ -1,11 +1,9 @@
-import 'package:firstapp/providers_and_settings/settings_provider.dart';
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import 'package:firstapp/other_utilities/timespan.dart';
-import 'package:firstapp/other_utilities/format_weekday.dart';
-import 'package:provider/provider.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
 
 
@@ -141,7 +139,7 @@ class _ExerciseProgressChartState extends State<ExerciseProgressChart> {
   @override
   Widget build(BuildContext context) {
     //final settings = context.read<SettingsModel>();
-    //debugPrint("datapoints.length: ${_dataPoints}");
+    ////debugPrint("datapoints.length: ${_dataPoints}");
     return _dataPoints.isEmpty
         ? const Center(child: Padding(
           padding: EdgeInsets.all(8.0),
@@ -220,26 +218,25 @@ class _ExerciseProgressChartState extends State<ExerciseProgressChart> {
                         bottomTitles: AxisTitles(
 
                           sideTitles: SideTitles(
-                          reservedSize: 30,
+                          reservedSize: 50,
                           showTitles: true,
                           getTitlesWidget: (value, meta) {
                             int index = value.toInt();
-                            // prevent divide by zero for less than 5 records
-                            if (_dataPoints.length < 5){
-                              return SideTitleWidget(
-                                meta: meta,
-                                child: Text(_dates[index], style: const TextStyle(fontSize: 14)),
-                              );
-                            }
+                            if (index < 0 || index >= _dates.length) return const SizedBox.shrink();
 
-                            if (index % ((_dataPoints.length / 5).floor()) == 0 && index >= 0 && index < _dates.length) { 
-                               //debugPrint("Runnnnn");
-                              return SideTitleWidget(
-                                meta: meta,
-                                child: Text(_dates[index], style: const TextStyle(fontSize: 14)),
-                              );
-                            }
-                            return Container(); // Hide labels that don’t meet the condition
+                            // Show at most 4 evenly-spaced labels to avoid overlap
+                            final int maxLabels = _dataPoints.length < 4 ? _dataPoints.length : 4;
+                            final int step = _dataPoints.length < 4 ? 1 : (_dataPoints.length / maxLabels).ceil();
+
+                            if (index % step != 0) return const SizedBox.shrink();
+
+                            return SideTitleWidget(
+                              meta: meta,
+                              child: Transform.rotate(
+                                angle: -pi / 4,
+                                child: Text(_dates[index], style: const TextStyle(fontSize: 11)),
+                              ),
+                            );
                           },
                           interval: 1, // Keep interval 1 so the graph still renders all points
                         ),
