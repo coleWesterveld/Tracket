@@ -4,13 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tracket — Workout Tracker</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta name="description" content="Tracket is a free, simple workout tracker for iPhone. Your gym notebook, in your pocket." />
+  <link rel="icon" type="image/png" href="tracket_logo.png" />
+  <link rel="apple-touch-icon" href="tracket_logo.png" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
 
   <header>
     <div class="header-inner">
-      <div class="logo">Tracket</div>
+      <a class="logo" href="#top"><img src="tracket_logo.png" alt="" width="24" height="24" />Tracket</a>
       <nav>
         <a href="#support">Support</a>
         <a href="#privacy">Privacy</a>
@@ -19,42 +22,70 @@
     </div>
   </header>
 
-  <section class="hero">
+  <section class="hero" id="top">
     <div class="hero-inner">
-      <h1>Your gym notebook,<br/>in your pocket.</h1>
-      <p>Track reps, sets, and progress — free, simple, and always with you.</p>
-      <a class="app-store-btn" href="https://apps.apple.com/app/tracket-workout-tracker/id6762223612" target="_blank">
-        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-        Download on the App Store
-      </a>
+      <div class="hero-copy">
+        <p class="eyebrow">Free on the App Store</p>
+        <h1>Your gym <em>notebook</em>,<br/>in your pocket.</h1>
+        <p class="lede">Track reps, sets, and progress — free, simple, and always with you. No account, no ads, and your data never leaves your phone.</p>
+        <div class="hero-actions">
+          <a class="app-store-btn" href="https://apps.apple.com/app/tracket-workout-tracker/id6762223612" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            <span><small>Download on the</small>App Store</span>
+          </a>
+          <a class="source-link" href="https://github.com/coleWesterveld/Tracket" target="_blank" rel="noopener">View the source&thinsp;&rarr;</a>
+        </div>
+      </div>
+      <div class="hero-phone">
+        <div class="phone"><img src="img/mid_workout.png" alt="Tracket mid-workout screen logging leg press sets with weight, reps, and RPE" width="560" height="1216" /></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="features-inner">
+      <figure>
+        <div class="phone small"><img src="img/program.png" alt="Program screen showing a push day with exercises, sets, rep ranges, and RPE targets" width="560" height="1216" loading="lazy" /></div>
+        <figcaption><strong>Plan</strong>Build your split — exercises, sets, rep ranges, RPE.</figcaption>
+      </figure>
+      <figure>
+        <div class="phone small"><img src="img/schedule.png" alt="Schedule screen showing a monthly calendar of push, pull, and legs days" width="560" height="1216" loading="lazy" /></div>
+        <figcaption><strong>Schedule</strong>See your training week at a glance.</figcaption>
+      </figure>
+      <figure>
+        <div class="phone small"><img src="img/analytics_graph.png" alt="Analytics screen charting predicted bench press one-rep max over six months" width="560" height="1216" loading="lazy" /></div>
+        <figcaption><strong>Progress</strong>Watch every lift trend up over time.</figcaption>
+      </figure>
     </div>
   </section>
 
   <section id="support" class="section">
     <div class="section-inner">
-      <h2>Support</h2>
+      <p class="kicker">Support</p>
+      <h2>Get in touch</h2>
       <p>
         Having an issue or want to suggest a feature? I'd love to hear from you.
         Tracket is a solo-built app and your feedback directly shapes what gets built next.
       </p>
-      <div class="contact-card">
-        <div class="contact-item">
-          <span class="label">Email</span>
-          <a href="mailto:colewesterveld@gmail.com">colewesterveld@gmail.com</a>
+      <dl class="contact-list">
+        <div class="contact-row">
+          <dt>Email</dt>
+          <dd><a href="mailto:colewesterveld@gmail.com">colewesterveld@gmail.com</a></dd>
         </div>
-        <div class="contact-item">
-          <span class="label">GitHub</span>
-          <a href="https://github.com/coleWesterveld/Tracket" target="_blank">Open an issue on GitHub</a>
+        <div class="contact-row">
+          <dt>GitHub</dt>
+          <dd><a href="https://github.com/coleWesterveld/Tracket" target="_blank" rel="noopener">Open an issue on GitHub</a></dd>
         </div>
-      </div>
+      </dl>
       <p class="small">I aim to respond within a few days. For bugs, including your iOS version and a short description of what happened is really helpful.</p>
     </div>
   </section>
 
   <section id="privacy" class="section alt">
     <div class="section-inner">
-      <h2>Privacy Policy</h2>
-      <p class="effective-date">Effective date: April 15, 2026</p>
+      <p class="kicker">Privacy Policy</p>
+      <h2>Your data is yours</h2>
+      <p class="effective-date">Effective April 15, 2026</p>
 
       <h3>Overview</h3>
       <p>
@@ -121,8 +152,9 @@
 
   <section id="terms" class="section">
     <div class="section-inner">
-      <h2>Terms of Service</h2>
-      <p class="effective-date">Effective date: April 15, 2026</p>
+      <p class="kicker">Terms of Service</p>
+      <h2>The fine print</h2>
+      <p class="effective-date">Effective April 15, 2026</p>
 
       <h3>Acceptance</h3>
       <p>

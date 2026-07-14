@@ -6,6 +6,16 @@
       ".firebaserc",
       "**/.*"
     ],
+    "headers": [
+      {
+        "source": "**/*.@(css|js)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=300" }]
+      },
+      {
+        "source": "**/*.@(png|jpg|svg|webp)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
+      }
+    ],
     "rewrites": [
       {
         "source": "**",
