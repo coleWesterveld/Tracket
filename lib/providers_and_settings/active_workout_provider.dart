@@ -10,6 +10,7 @@ import 'package:firstapp/providers_and_settings/program_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For saving state
 import 'dart:convert'; // For jsonEncode/jsonDecode
 import 'package:firstapp/providers_and_settings/snapshot_active_workout.dart';
+import 'package:firstapp/notifications/workout_widget_service.dart';
 
 //import 'dart:math';
 // programProvider.split, programProvider.sets, etc in provider
@@ -507,6 +508,62 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   }
 
   // Helper to start UI timer based on current pause state
+  // ── iOS home-screen widget helpers ──────────────────────────────────────────
+
+  /// Returns the index of the first exercise in [activeDayIndex] that hasn't
+  /// been fully completed, or null if all are done (or no workout is active).
+  int? _currentExerciseIndex() {
+    if (activeDayIndex == null) return null;
+    for (int i = 0; i < isExerciseComplete.length; i++) {
+      if (!isExerciseComplete[i]) return i;
+    }
+    return null;
+  }
+
+  /// Pushes the latest workout state to the iOS home-screen widget.
+  /// Throttled: only calls the native bridge every 30 timer ticks (~30 s).
+  int _widgetTickCount = 0;
+  void _pushWidgetUpdate({bool force = false}) {
+    _widgetTickCount++;
+    if (!force && _widgetTickCount % 30 != 0) return;
+
+    final curIdx = _currentExerciseIndex();
+    final exercises = activeDayIndex != null
+        ? programProvider.exercises[activeDayIndex!]
+        : <ExerciseInstance>[];
+
+    final currentEx = curIdx != null && curIdx < exercises.length
+        ? exercises[curIdx].exerciseTitle
+        : '';
+
+    final nextExIdx = curIdx != null ? curIdx + 1 : null;
+    final nextEx = nextExIdx != null && nextExIdx < exercises.length
+        ? exercises[nextExIdx].exerciseTitle
+        : null;
+
+    final curSetGroup = curIdx != null &&
+            curIdx < programProvider.sets[activeDayIndex!].length
+        ? programProvider.sets[activeDayIndex!][curIdx]
+        : <PlannedSet>[];
+    final setIdx = curIdx != null ? (nextSet.length > curIdx ? nextSet[curIdx] : 0) : 0;
+    final PlannedSet? curSet = setIdx < curSetGroup.length ? curSetGroup[setIdx] : null;
+
+    final setInfo = curSet != null
+        ? 'Set ${setIdx + 1} — ${curSet.repsLower}–${curSet.repsUpper} reps @ RPE ${curSet.rpe}'
+        : '';
+
+    WorkoutWidgetService.update(
+      currentExercise: currentEx,
+      setInfo: setInfo,
+      nextExercise: nextEx,
+      elapsedSeconds: workoutTime.inSeconds,
+      restSeconds: lastRestStartTime != null ? restTime.inSeconds : -1,
+      isResting: lastRestStartTime != null,
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+
   void startTimers() {
     timer?.cancel(); // Ensure no multiple timers
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -522,6 +579,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
       }
 
       if (!isPaused) { // isPaused should be correctly set from snapshot
+        _pushWidgetUpdate();
         notifyListeners();
       } else{
         // Okay this is kinda a strange solution that I came up with
@@ -769,6 +827,7 @@ void _initializeStructuresForDay(int dayIdx) {
       nextSet = [0,0,0]; // Reset nextSet
       shakeFinish = false;
       setPRs.clear(); // PRs are per session
+      _pushWidgetUpdate(force: true); // Show widget immediately on workout start
 
     } else { // Clearing active day
       // Capture temp day info before clearing state
@@ -801,6 +860,7 @@ void _initializeStructuresForDay(int dayIdx) {
       // NOTE: anything summarizing the finished workout (PR count etc.) has to
       // read this before the teardown runs.
       setPRs.clear();
+      WorkoutWidgetService.clear(); // Remove active-workout widget data
       await clearActiveWorkoutState(); // Clear snapshot when workout is explicitly ended/cleared
 
       // Delete the temporary day from DB and memory after all state is cleared
@@ -858,6 +918,7 @@ void _initializeStructuresForDay(int dayIdx) {
     workoutStartTime = null;
     lastRestStartTime = null;
     setPRs.clear(); // the sets those PRs came from were just deleted
+    WorkoutWidgetService.clear(); // Remove active-workout widget data
     await clearActiveWorkoutState();
 
     // Drop the one-off day too, if this was a free workout.
