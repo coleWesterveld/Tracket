@@ -12,10 +12,13 @@ swap the iOS bundle identifier to a dev-only one, build, then revert.
 
 ## Steps
 
-1. Swap the identifier in all three Runner configs (Debug, Release, Profile):
+1. Swap the identifier in all Runner AND widget extension configs. The match
+   deliberately has no trailing semicolon so it also catches the extension's
+   `com.cole.tracket.WorkoutWidget` (an extension's bundle ID must be prefixed
+   by its parent app's ID, or iOS refuses to embed it):
 
    ```sh
-   sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.cole.tracket;/PRODUCT_BUNDLE_IDENTIFIER = com.example.coleAppTesting;/g' ios/Runner.xcodeproj/project.pbxproj
+   sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.cole.tracket/PRODUCT_BUNDLE_IDENTIFIER = com.example.coleAppTesting/g' ios/Runner.xcodeproj/project.pbxproj
    ```
 
 2. Build and install to the phone:
@@ -40,6 +43,11 @@ swap the iOS bundle identifier to a dev-only one, build, then revert.
    App Store build.
 
 ## Notes
+
+- **This whole workflow is a candidate for replacement** by proper Xcode
+  flavors (a `dev` build configuration with its own bundle IDs, display name,
+  and App Group), driven by a deploy script, so nothing ever mutates
+  `project.pbxproj`. See discussion in `live-activity-design.md` era notes.
 
 - The dev app gets its own sandbox and therefore its own **empty database**.
   Real workout history lives in the App Store app and will not appear in the
