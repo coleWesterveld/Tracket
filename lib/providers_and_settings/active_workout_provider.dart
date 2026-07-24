@@ -1,4 +1,5 @@
 import 'package:firstapp/other_utilities/ensure_length.dart';
+import 'package:firstapp/other_utilities/pr_detection.dart';
 import 'package:flutter/material.dart';
 //import 'data_saving.dart';
 import '../database/database_helper.dart';
@@ -53,6 +54,39 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   String? sessionID;
   int? activeProgramId;
   bool shakeFinish = false;
+
+  /// PR marks earned this session, keyed "exerciseIndex-setIndex-subSetIndex".
+  ///
+  /// These live here rather than in GymSetRow's own state because a row is
+  /// disposed when its exercise tile collapses, which would drop the mark the
+  /// moment the user moves on to the next exercise.
+  final Map<String, PRKind> setPRs = {};
+
+  static String prKey(int exerciseIndex, int setIndex, int subSetIndex) =>
+      '$exerciseIndex-$setIndex-$subSetIndex';
+
+  PRKind prForSet(int exerciseIndex, int setIndex, int subSetIndex) =>
+      setPRs[prKey(exerciseIndex, setIndex, subSetIndex)] ?? PRKind.none;
+
+  /// Records (or with [PRKind.none], clears) the mark for one set.
+  void setPRForSet(int exerciseIndex, int setIndex, int subSetIndex, PRKind kind) {
+    final key = prKey(exerciseIndex, setIndex, subSetIndex);
+    if (kind == PRKind.none) {
+      if (setPRs.remove(key) == null) return;
+    } else {
+      if (setPRs[key] == kind) return;
+      setPRs[key] = kind;
+    }
+    notifyListeners();
+  }
+
+  /// True if any set of [exerciseIndex] earned a PR this session - drives the
+  /// marker beside the exercise title.
+  bool exerciseHasPR(int exerciseIndex) =>
+      setPRs.keys.any((k) => k.startsWith('$exerciseIndex-'));
+
+  /// Total PRs this session.
+  int get prCount => setPRs.length;
 
   // versioned by Json structure, in case updates come
   static const String _snapshotKey = 'activeWorkoutSnapshot_v1';
@@ -193,6 +227,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
       tecValues: currentTecValues,
       exerciseExpansionStates: expansionStates,
       loggedRecordIDs: currentLoggedRecordIDs,
+      setPRs: setPRs.map((key, kind) => MapEntry(key, kind.name)),
     );
 
     ////debugPrint("2 hey this should run for sure");
@@ -271,6 +306,17 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     // 1. Basic State Restoration
     sessionID = snapshot.sessionID; // Crucial: set this first
     activeDayIndex = snapshot.activeDayIndex;
+
+    // PR marks earned before the app was backgrounded.
+    setPRs.clear();
+    snapshot.setPRs?.forEach((key, kindName) {
+      final kind = PRKind.values.firstWhere(
+        (k) => k.name == kindName,
+        orElse: () => PRKind.none,
+      );
+      if (kind != PRKind.none) setPRs[key] = kind;
+    });
+
     activeProgramId = programProvider.currentProgram.programID;
     workoutStartTime = snapshot.startWorkoutTime;
     lastRestStartTime = snapshot.startRestTime;
@@ -640,6 +686,7 @@ void _initializeStructuresForDay(int dayIdx) {
       isPaused = false;
       nextSet = [0,0,0]; // Reset nextSet
       shakeFinish = false;
+      setPRs.clear(); // PRs are per session
 
     } else { // Clearing active day
       // Capture temp day info before clearing state
@@ -669,6 +716,9 @@ void _initializeStructuresForDay(int dayIdx) {
       nextSet = [0,0,0];
       workoutStartTime = null;
       lastRestStartTime = null;
+      // NOTE: anything summarizing the finished workout (PR count etc.) has to
+      // read this before the teardown runs.
+      setPRs.clear();
       await clearActiveWorkoutState(); // Clear snapshot when workout is explicitly ended/cleared
 
       // Delete the temporary day from DB and memory after all state is cleared
@@ -725,6 +775,7 @@ void _initializeStructuresForDay(int dayIdx) {
     isExerciseComplete = [];
     workoutStartTime = null;
     lastRestStartTime = null;
+    setPRs.clear(); // the sets those PRs came from were just deleted
     await clearActiveWorkoutState();
 
     // Drop the one-off day too, if this was a free workout.

@@ -8,6 +8,8 @@ import 'package:firstapp/providers_and_settings/program_provider.dart';
 import '../providers_and_settings/settings_provider.dart';
 import 'package:firstapp/widgets/shake_widget.dart';
 import 'package:firstapp/widgets/app_message.dart';
+import 'package:firstapp/other_utilities/pr_detection.dart';
+import 'package:firstapp/theme/app_colours.dart';
 import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
 import 'dart:async'; // For Timer
 import 'package:keyboard_actions/keyboard_actions.dart';
@@ -17,8 +19,11 @@ class GymSetRow extends StatefulWidget {
   final int repsLower;
   final int repsUpper;
   final double expectedRPE;
-  final int exerciseIndex, setIndex;
-  final Function(bool) onChanged;
+  final int exerciseIndex, setIndex, subSetIndex;
+
+  /// Logs or unlogs the set. Returns a [PRResult] when logging just set a
+  /// personal record, so the row can flash the field that earned it.
+  final Future<PRResult?> Function(bool) onChanged;
   final bool? initiallyChecked;
   final TextEditingController weightController;
   final TextEditingController repsController;
@@ -32,6 +37,7 @@ class GymSetRow extends StatefulWidget {
     required this.expectedRPE,
     required this.exerciseIndex,
     required this.setIndex,
+    required this.subSetIndex,
     required this.onChanged,
     required this.repsController,
     required this.weightController,
@@ -64,6 +70,12 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
   late AnimationController _saveAnimationController;
   String? _animatingFieldIdentifier; // 'weight', 'reps', or 'rpe'
 
+  // PR flash. Reuses the save-confirmation animation, but tinted orange and
+  // with a two-beat message ("PR", then "was 220") instead of a checkmark.
+  // Null unless the current animation run is a PR rather than a save.
+  String? _prFlashField;
+  String? _prPreviousBest;
+
   // For "Saved" confirmation
   String? _fieldJustSaved; // Will be 'weight', 'reps', or 'rpe'
   Timer? _saveConfirmationTimer;
@@ -89,6 +101,8 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
         if (mounted) {
           setState(() {
             _animatingFieldIdentifier = null; // Clear after animation completes
+            _prFlashField = null;
+            _prPreviousBest = null;
           });
         }
       }
@@ -137,7 +151,10 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     if (weightFocus.hasFocus) {
       _initialWeightOnFocus = widget.weightController.text;
       if (_animatingFieldIdentifier == 'weight') _saveAnimationController.stop(); // Stop animation if re-focused
-      setState(() => _animatingFieldIdentifier = null );
+      setState(() {
+        _animatingFieldIdentifier = null;
+        _prFlashField = null;
+      });
       
       // Auto-select all text when focused for easy overwriting
       if (widget.weightController.text.isNotEmpty) {
@@ -157,7 +174,10 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     if (rpeFocus.hasFocus) {
       _initialRpeOnFocus = widget.rpeController.text;
       if (_animatingFieldIdentifier == 'rpe') _saveAnimationController.stop();
-      setState(() => _animatingFieldIdentifier = null );
+      setState(() {
+        _animatingFieldIdentifier = null;
+        _prFlashField = null;
+      });
       
       // Auto-select all text when focused for easy overwriting
       if (widget.rpeController.text.isNotEmpty) {
@@ -177,7 +197,10 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     if (repsFocus.hasFocus) {
       _initialRepsOnFocus = widget.repsController.text;
       if (_animatingFieldIdentifier == 'reps') _saveAnimationController.stop();
-      setState(() => _animatingFieldIdentifier = null );
+      setState(() {
+        _animatingFieldIdentifier = null;
+        _prFlashField = null;
+      });
       
       // Auto-select all text when focused for easy overwriting
       if (widget.repsController.text.isNotEmpty) {
@@ -191,6 +214,39 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
         _handleFieldUpdate('reps');
       }
     }
+  }
+
+  /// Logs or unlogs this set, then flashes the field that earned a PR (if any).
+  /// Shared by the wide and stacked layouts so the two can't drift apart.
+  Future<void> _onCheckboxTap() async {
+    if (context.read<SettingsModel>().hapticsEnabled) {
+      HapticFeedback.heavyImpact();
+    }
+
+    // is not checked means now we are trying to save it
+    // we dont need to validate inputs when unsaving
+    if (!_isChecked) {
+      WidgetsBinding.instance.focusManager.primaryFocus?.unfocus();
+      _validateInputs();
+      if (_weightError || _repsError || _rpeError) return;
+    }
+
+    _clearSavedConfirmation();
+
+    setState(() => _isChecked = !_isChecked);
+
+    final PRResult? pr = await widget.onChanged(_isChecked);
+    if (!mounted || pr == null || pr.kind == PRKind.none) return;
+
+    // The field that earned it tells the user WHICH record it was, so no
+    // wording is needed: weight field means heaviest, reps field means most.
+    setState(() {
+      _prFlashField = pr.kind == PRKind.weight ? 'weight' : 'reps';
+      _prPreviousBest = pr.previousBest;
+      _animatingFieldIdentifier = _prFlashField;
+    });
+    _saveAnimationController.reset();
+    _saveAnimationController.forward();
   }
 
   Future<void> _handleFieldUpdate(String fieldName) async {
@@ -236,6 +292,8 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     if (success && mounted) {
       setState(() {
         _animatingFieldIdentifier = fieldName;
+        _prFlashField = null; // this run is a save, not a PR
+        _prPreviousBest = null;
       });
       _saveAnimationController.reset();
       _saveAnimationController.forward();
@@ -345,28 +403,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: InkWell(
-                        onTap: () {
-                          if (context.read<SettingsModel>().hapticsEnabled) {
-                            HapticFeedback.heavyImpact();
-                          }
-
-                          // is not checked means now we are trying to save it
-                          // we dont need to validate inputs when unsaving
-                          if (!_isChecked){
-                            WidgetsBinding.instance.focusManager.primaryFocus?.unfocus();
-                            _validateInputs();
-                            if (_weightError || _repsError || _rpeError) return;
-                          }
-
-                          _clearSavedConfirmation();
-
-                          setState(() {
-                            _isChecked = !_isChecked;
-                            widget.onChanged(_isChecked);
-                          });
-
-
-                        },
+                        onTap: _onCheckboxTap,
                         child: Container(
                           width: 24.0,
                           height: 24.0,
@@ -520,8 +557,32 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     }
   }
 
+  /// The two beats of a PR flash: "PR", then what it beat. Sized to scale down
+  /// inside the field rather than overflow it, since the fields are narrow and
+  /// "was 227.5" is a lot of characters for 50px.
+  Widget _buildPRFlashLabel(double animValue, double width) {
+    final bool showPrevious = animValue >= 0.55 && _prPreviousBest != null;
+
+    return SizedBox(
+      width: width - 6,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          showPrevious ? 'was $_prPreviousBest' : 'PR',
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: showPrevious ? 11 : 14,
+            fontWeight: FontWeight.w900,
+            letterSpacing: showPrevious ? 0 : 0.5,
+            color: Colors.white.withOpacity(0.95),
+          ),
+        ),
+      ),
+    );
+  }
+
   // yeah atp this should maybe be made
-   
+
 
   Widget _buildTextFieldWithConfirmation(
     TextEditingController controller,
@@ -535,32 +596,48 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
     final double animValue = _saveAnimationController.value; // 0.0 to 1.0
     final theme = Theme.of(context);
 
+    // A PR run of the animation is orange and spells out the record instead of
+    // showing the green save checkmark.
+    final bool isPRFlash = amIAnimating && _prFlashField == fieldIdentifier;
+    final Color flashColor =
+        isPRFlash ? accentOrange : Colors.green.withOpacity(0.6);
+
+    // The mark left behind once the flash is over, so the record is still
+    // visible when you come back to the exercise later in the session.
+    final PRKind setPR = context.watch<ActiveWorkoutProvider>().prForSet(
+      widget.exerciseIndex,
+      widget.setIndex,
+      widget.subSetIndex,
+    );
+    final bool fieldHoldsPR = (setPR == PRKind.weight && fieldIdentifier == 'weight') ||
+        (setPR == PRKind.reps && fieldIdentifier == 'reps');
+
     Color currentBgColor = hasError ? theme.colorScheme.errorContainer : theme.scaffoldBackgroundColor;
     double textOpacity = 1.0;
     double checkmarkOpacity = 0.0;
 
     if (amIAnimating) {
       // Animation phases:
-      // 0.0 - 0.25: Fade text out, fade bg to green
-      // 0.25 - 0.75: Show checkmark, bg green
+      // 0.0 - 0.25: Fade text out, fade bg to the flash colour
+      // 0.25 - 0.75: Show checkmark (or "PR" then "was X"), bg held
       // 0.75 - 1.0: Fade checkmark out, fade text in, fade bg to normal
       if (animValue < 0.25) {
         textOpacity = 1.0 - (animValue / 0.25);
-        currentBgColor = Color.lerp(currentBgColor, Colors.green.withOpacity(0.6), animValue / 0.25)!;
+        currentBgColor = Color.lerp(currentBgColor, flashColor, animValue / 0.25)!;
         checkmarkOpacity = animValue / 0.25; // Fade in checkmark with bg
       } else if (animValue < 0.75) {
         textOpacity = 0.0;
-        currentBgColor = Colors.green.withOpacity(0.6);
+        currentBgColor = flashColor;
         checkmarkOpacity = 1.0;
       } else {
         textOpacity = (animValue - 0.75) / 0.25;
-        currentBgColor = Color.lerp(Colors.green.withOpacity(0.6), hasError ? theme.colorScheme.errorContainer : theme.colorScheme.surfaceContainerHighest.withAlpha(100), (animValue - 0.75) / 0.25)!;
+        currentBgColor = Color.lerp(flashColor, hasError ? theme.colorScheme.errorContainer : theme.colorScheme.surfaceContainerHighest.withAlpha(100), (animValue - 0.75) / 0.25)!;
         checkmarkOpacity = 1.0 - ((animValue - 0.75) / 0.25);
       }
       textOpacity = textOpacity.clamp(0.0, 1.0);
       checkmarkOpacity = checkmarkOpacity.clamp(0.0, 1.0);
     }
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: SizedBox(
@@ -627,18 +704,35 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                   ),
                 ),
             
-                // Checkmark overlay
+                // Checkmark overlay (or the PR message, on a PR run)
               if (checkmarkOpacity > 0) // Only build if visible or fading
                 IgnorePointer( // Checkmark should not be interactive
                   child: Opacity(
                     opacity: checkmarkOpacity,
-                    child: Icon(
-                      Icons.check_circle,
-                      color: Colors.white.withOpacity(0.9), // White checkmark, slightly transparent for blending
-                      size: 18,
-                    ),
+                    child: isPRFlash
+                        ? _buildPRFlashLabel(animValue, width)
+                        : Icon(
+                            Icons.check_circle,
+                            color: Colors.white.withOpacity(0.9), // White checkmark, slightly transparent for blending
+                            size: 18,
+                          ),
                   ),
                 ),
+
+                // Persistent PR mark, tucked into the corner so it never
+                // reflows the row.
+                if (fieldHoldsPR)
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    child: IgnorePointer(
+                      child: Icon(
+                        Icons.emoji_events,
+                        size: 11,
+                        color: accentOrange,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

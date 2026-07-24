@@ -14,6 +14,18 @@
 /// Which kind of record a set achieved, if any.
 enum PRKind { none, weight, reps }
 
+/// A PR plus the number it beat, for the "was 220" beat-your-history flash.
+class PRResult {
+  final PRKind kind;
+
+  /// The old record, already formatted in the unit the user sees: the previous
+  /// heaviest weight for a [PRKind.weight], the previous best reps at this
+  /// weight for a [PRKind.reps].
+  final String previousBest;
+
+  const PRResult({required this.kind, required this.previousBest});
+}
+
 /// Summary of an exercise's logged history, used to judge a single set.
 ///
 /// All weights are in LBS - the internal storage unit of `set_log`.

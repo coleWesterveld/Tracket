@@ -30,8 +30,8 @@ import 'package:keyboard_actions/keyboard_actions.dart';
 // I think it may be more clear to change all imports to this package version
 // then again, idk if it really matters
 import 'package:firstapp/widgets/workout_stopwatch.dart';
-import 'package:firstapp/widgets/pr_badge.dart';
 import 'package:firstapp/widgets/app_message.dart';
+import 'package:firstapp/theme/app_colours.dart';
 import 'package:firstapp/other_utilities/pr_detection.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
 
@@ -378,6 +378,17 @@ class _WorkoutState extends State<Workout> {
                             color: Profile.supersetColor(supersetGroup),
                           ),
                         ],
+                        // Trophy beside the title once any set of this exercise
+                        // has set a record, so a collapsed list still shows where
+                        // the session's PRs happened.
+                        if (context.watch<ActiveWorkoutProvider>().exerciseHasPR(index)) ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.emoji_events,
+                            size: 16,
+                            color: accentOrange,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -551,6 +562,7 @@ class _WorkoutState extends State<Workout> {
                                 expectedRPE: context.read<Profile>().sets[primaryIndex][index][setIndex].rpe?.toDouble() ?? 0.0,
                                 exerciseIndex: index,
                                 setIndex: setIndex,
+                                subSetIndex: subSetIndex,
                                 rpeController: context.read<ActiveWorkoutProvider>().workoutRpeTEC[index][setIndex][subSetIndex],
                                 repsController: context.read<ActiveWorkoutProvider>().workoutRepsTEC[index][setIndex][subSetIndex],
                                 weightController: context.read<ActiveWorkoutProvider>().workoutWeightTEC[index][setIndex][subSetIndex],
@@ -560,6 +572,10 @@ class _WorkoutState extends State<Workout> {
                                 onChanged: (isChecked) async {
                                   int loggedRecordID = -1;
                                   final workoutProvider = context.read<ActiveWorkoutProvider>();
+
+                                  // Set below if this log turns out to be a PR; returned to
+                                  // GymSetRow, which flashes the field that earned it.
+                                  PRResult? prResult;
 
                                   // logs the set to the DB - sets loggedRecordID to be the ID of the set so we can referecne to update and delete
                                   if (isChecked) {
@@ -622,13 +638,20 @@ class _WorkoutState extends State<Workout> {
                                         );
 
                                         if (prKind != PRKind.none && context.mounted) {
-                                          PRBanner.show(
-                                            context,
+                                          // What the set beat, in the unit the user sees.
+                                          final double previousBest = prKind == PRKind.weight
+                                              ? (useMetric
+                                                  ? lbToKg(pounds: snapshot.bestWeight!)
+                                                  : snapshot.bestWeight!)
+                                              : snapshot.bestRepsAtWeight!;
+
+                                          prResult = PRResult(
                                             kind: prKind,
-                                            exerciseName: exercise.exerciseTitle,
-                                            weight: _trimNumber(loggedWeight),
-                                            reps: _trimNumber(loggedReps),
-                                            unit: useMetric ? 'kg' : 'lbs',
+                                            previousBest: _trimNumber(previousBest),
+                                          );
+
+                                          context.read<ActiveWorkoutProvider>().setPRForSet(
+                                            index, setIndex, subSetIndex, prKind,
                                           );
                                         }
                                       }
@@ -644,6 +667,14 @@ class _WorkoutState extends State<Workout> {
                                       //debugPrint("Cannot unlog set by referencing a null ID");
                                     }
                                     // unlog this set
+
+                                    // The record came from a set that no longer exists,
+                                    // so the mark goes with it.
+                                    if (context.mounted) {
+                                      context.read<ActiveWorkoutProvider>().setPRForSet(
+                                        index, setIndex, subSetIndex, PRKind.none,
+                                      );
+                                    }
                                   }
 
 
@@ -682,6 +713,8 @@ class _WorkoutState extends State<Workout> {
                                     // rather than duplicating the all-logged loop here (#9).
                                     context.read<ActiveWorkoutProvider>().recalculateCompletion();
                                   });
+
+                                  return prResult;
                                 },
                               );
                             }

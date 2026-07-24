@@ -32,6 +32,11 @@ class ActiveWorkoutSnapshot {
 
   final List<List<List<int?>>>? loggedRecordIDs;
 
+  /// PR marks earned this session: "exerciseIndex-setIndex-subSetIndex" -> kind
+  /// name ('weight' or 'reps'). Optional - snapshots written before PRs existed
+  /// simply restore with none.
+  final Map<String, String>? setPRs;
+
   ActiveWorkoutSnapshot({
     required this.sessionID,
     required this.activeDayIndex,
@@ -43,6 +48,7 @@ class ActiveWorkoutSnapshot {
     required this.tecValues,
     this.exerciseExpansionStates,
     this.loggedRecordIDs,
+    this.setPRs,
   });
 
   factory ActiveWorkoutSnapshot.fromJson(Map<String, dynamic> json) {
@@ -73,6 +79,9 @@ class ActiveWorkoutSnapshot {
           ? List<bool>.from(json['exerciseExpansionStates'] as List)
           : null,
       loggedRecordIDs: parsedLoggedRecordIDs, // Assign parsed value
+      setPRs: json['setPRs'] != null
+          ? Map<String, String>.from(json['setPRs'] as Map)
+          : null,
     );
   }
 
@@ -86,5 +95,6 @@ class ActiveWorkoutSnapshot {
     'tecValues': tecValues,
     'exerciseExpansionStates': exerciseExpansionStates,
     'loggedRecordIDs': loggedRecordIDs, // Add to JSON (jsonEncode handles List<List<List<int?>>> fine)
+    'setPRs': setPRs,
   };
 }
