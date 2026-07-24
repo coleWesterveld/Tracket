@@ -1,7 +1,22 @@
 # Workout Live Activity: design
 
-Status: **agreed in brainstorm, not yet implemented.** Do not start building
-until the open questions at the bottom are settled and the user says go.
+Status: **implemented.** The open questions at the bottom are settled; answers
+recorded there. Key files:
+
+- `ios/Shared/WorkoutActivityAttributes.swift`: attributes + content state,
+  compiled into both Runner and WorkoutWidgetExtension (explicit references
+  in project.pbxproj).
+- `ios/WorkoutWidget/WorkoutLiveActivity.swift`: the card UI.
+- `ios/Runner/LiveActivityBridge.swift`: ActivityKit calls, driven by the
+  `tracket/workout_live_activity` MethodChannel.
+- `lib/live_activity/workout_live_activity.dart`: Dart half, no-op off iOS.
+- `lib/providers_and_settings/active_workout_provider.dart`: pushes state
+  from `_syncLiveActivity()` at the event call sites.
+
+One deviation from the mock below: the target line has no "@ 185 lbs". The
+data model plans rep ranges and RPE, not weight, so the line reads
+"Set 3 of 5: 8-10 reps @ RPE 8". Pause/resume also pushes an update, since
+pausing shifts the timestamp anchors the clocks render from.
 
 This is an iOS **Live Activity** (ActivityKit): the persistent card on the
 Lock Screen and in the Dynamic Island while a workout is in progress, like a
@@ -74,13 +89,11 @@ All four presentations are required by the API; the content is simple:
   rendering regardless; layout changes only happen on the next app event,
   which is fine since layout only changes when the user logs something.
 
-## Open questions
+## Open questions (settled 2026-07-24)
 
-1. **Set dots, text, or both?** Dots top-right plus "Set 3 of 5" text line,
-   or dots only, or text only.
-2. **"Next: <exercise>" always visible, or only on the last set** of the
-   current exercise? (Last-set-only was the original pitch: contextual, less
-   clutter.)
-3. **Dart-to-ActivityKit bridge:** hand-rolled `MethodChannel` (about 100
-   lines, no new dependency, mild preference) vs the `live_activities` pub
-   package.
+1. **Set dots, text, or both?** Both: dots top-right plus the "Set 3 of 5"
+   text line. Dots fall back to "3/12" text above 6 sets.
+2. **"Next: <exercise>" always visible, or only on the last set?**
+   Last set only.
+3. **Dart-to-ActivityKit bridge:** hand-rolled `MethodChannel`, no new
+   dependency.
