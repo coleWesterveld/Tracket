@@ -1,5 +1,5 @@
-import 'package:firstapp/other_utilities/format_reps.dart';
 import 'package:firstapp/other_utilities/format_weekday.dart';
+import 'package:firstapp/widgets/progress_tick.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:flutter/material.dart';
@@ -271,26 +271,9 @@ class _ExerciseProgressRowState extends State<ExerciseProgressRow> {
   }
 
   /// Returns a widget representing the change as an arrow icon and text.
-  Widget buildTick(double diff, String unit) {
-    if (diff > 0) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.arrow_drop_up, color: Colors.green),
-          Text("${formatWeight(diff)} $unit", style: const TextStyle(fontSize: 14)),
-        ],
-      );
-    } else if (diff < 0) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.arrow_drop_down, color: Colors.red),
-          Text("${formatWeight(diff.abs())} $unit", style: const TextStyle(fontSize: 14)),
-        ],
-      );
-    }
-    return Container(); // return empty container for zero change
-  }
+  /// Shared with the finish summary so both read the same way.
+  Widget buildTick(double diff, String unit) =>
+      ProgressTick(diff: diff, unit: unit);
 
   @override
   Widget build(BuildContext context) {
@@ -311,10 +294,7 @@ class _ExerciseProgressRowState extends State<ExerciseProgressRow> {
             );
           } else if (!snapshot.hasData || snapshot.data == null) {
             // If no record in the last 7 days, show "- same"
-            progressIndicator = const Text(
-              "- same",
-              style: TextStyle(fontSize: 14),
-            );
+            progressIndicator = const ProgressTickSame();
           } else {
             final recent = snapshot.data!['recent'];
             final previous = snapshot.data!['previous'];
@@ -344,10 +324,7 @@ class _ExerciseProgressRowState extends State<ExerciseProgressRow> {
             }
       
             if (changes.isEmpty) {
-              progressIndicator = const Text(
-                "- same",
-                style: TextStyle(fontSize: 14),
-              );
+              progressIndicator = const ProgressTickSame();
             } else {
               progressIndicator = Row(
                 mainAxisSize: MainAxisSize.min,

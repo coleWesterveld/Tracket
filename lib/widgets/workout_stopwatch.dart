@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../workout_page/workout_page.dart';
+import '../workout_page/workout_summary.dart';
+import '../workout_page/workout_summary_page.dart';
+import '../providers_and_settings/program_provider.dart';
 import '../providers_and_settings/settings_provider.dart';
 
 
@@ -157,14 +160,33 @@ class WorkoutControlBar extends StatelessWidget {
                     child: OutlinedButton(
                       onPressed: () async {
                         if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
+
+                        // Snapshot the session BEFORE anything is torn down:
+                        // the lines below null the stopwatch and clear the PR
+                        // marks, and the summary cannot get them back.
+                        final navigator = Navigator.of(context, rootNavigator: true);
+                        final summary = await buildWorkoutSummary(
+                          workout: activeWorkout,
+                          profile: context.read<Profile>(),
+                          useMetric: context.read<SettingsModel>().useMetric,
+                        );
+
                         activeWorkout.workoutStartTime = null;
                         activeWorkout.lastRestStartTime = null;
                         activeWorkout.timer?.cancel();
-                        
+
                         if(positionAtTop) Navigator.pop(context, true);
-                        
-                        context.read<ActiveWorkoutProvider>().setActiveDayAndStartNew(null);
-                      
+
+                        activeWorkout.setActiveDayAndStartNew(null);
+
+                        // Nothing logged means nothing to show. Finishing an
+                        // empty workout should just close.
+                        if (summary != null) {
+                          navigator.push(MaterialPageRoute(
+                            fullscreenDialog: true,
+                            builder: (_) => WorkoutSummaryPage(summary: summary),
+                          ));
+                        }
                       },
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: theme.colorScheme.primary, width: 2),

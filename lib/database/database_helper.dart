@@ -1875,6 +1875,63 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
     );
   }
 
+  /// The top set of [exerciseId] in [sessionId], alongside its top set in the
+  /// session before that one. Used by the finish summary to answer "how did
+  /// today go against last time".
+  ///
+  /// "Top" means heaviest, with more reps breaking ties: the same notion of
+  /// better that PR detection uses, so the summary can never disagree with the
+  /// badge the user just saw. Weights are LBS.
+  ///
+  /// Returns null when nothing was logged for the exercise in [sessionId].
+  /// `prev_weight`/`prev_reps` are null the first time an exercise is done.
+  Future<Map<String, dynamic>?> fetchTopSetComparison({
+    required int exerciseId,
+    required String sessionId,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+
+    const String topSetQuery = '''
+      SELECT weight, reps
+      FROM set_log
+      WHERE exercise_id = ? AND session_id = ?
+      ORDER BY weight DESC, reps DESC
+      LIMIT 1
+    ''';
+
+    final current = await db.rawQuery(topSetQuery, [exerciseId, sessionId]);
+    if (current.isEmpty) return null;
+
+    // The session for this exercise that ended most recently before this one.
+    // Ordering by date rather than by id: sets can be edited after the fact.
+    final previousSession = await db.rawQuery('''
+      SELECT session_id
+      FROM set_log
+      WHERE exercise_id = ? AND session_id != ?
+      GROUP BY session_id
+      ORDER BY MAX(datetime(date)) DESC
+      LIMIT 1
+    ''', [exerciseId, sessionId]);
+
+    List<Map<String, Object?>> previous = const [];
+    if (previousSession.isNotEmpty) {
+      previous = await db.rawQuery(
+        topSetQuery,
+        [exerciseId, previousSession.first['session_id']],
+      );
+    }
+
+    return {
+      'weight': (current.first['weight'] as num).toDouble(),
+      'reps': (current.first['reps'] as num).toDouble(),
+      'prev_weight': previous.isEmpty
+          ? null
+          : (previous.first['weight'] as num).toDouble(),
+      'prev_reps':
+          previous.isEmpty ? null : (previous.first['reps'] as num).toDouble(),
+    };
+  }
+
   // close database
   Future close() async {
     final db = await instance.database;
