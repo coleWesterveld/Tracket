@@ -33,6 +33,7 @@ import 'package:firstapp/widgets/workout_stopwatch.dart';
 import 'package:firstapp/widgets/app_message.dart';
 import 'package:firstapp/theme/app_colours.dart';
 import 'package:firstapp/other_utilities/pr_detection.dart';
+import 'package:firstapp/other_utilities/pr_flash.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
 
 /// 225.0 -> "225", 227.5 -> "227.5". Just for display in the PR banner.
@@ -127,6 +128,23 @@ class _WorkoutState extends State<Workout> {
     super.dispose();
   }
 
+  /// Collapses the exercise just finished and opens the one the workout has
+  /// moved on to. Call inside setState.
+  void _advanceToNextExercise(int finishedIndex) {
+    final awp = context.read<ActiveWorkoutProvider>();
+    final int next = awp.nextSet[0];
+    if (next >= awp.workoutExpansionControllers.length ||
+        finishedIndex >= awp.workoutExpansionControllers.length) {
+      return; // exercises changed under us while a PR flash was running
+    }
+
+    awp.workoutExpansionControllers[next].expand();
+    awp.expansionStates[next] = true;
+
+    awp.workoutExpansionControllers[finishedIndex].collapse();
+    awp.expansionStates[finishedIndex] = false;
+  }
+
   void _handleExerciseSelected(Map<String, dynamic> exercise) async {
     final activeDayIndex = context.read<ActiveWorkoutProvider>().activeDayIndex;
     if (activeDayIndex == null) return;
@@ -183,7 +201,9 @@ class _WorkoutState extends State<Workout> {
         ),
       ),
     )
-    : GestureDetector(
+    : Stack(
+      children: [
+        GestureDetector(
       onTap: () {
         WidgetsBinding.instance.focusManager.primaryFocus?.unfocus();
       },
@@ -224,6 +244,15 @@ class _WorkoutState extends State<Workout> {
                 itemBuilder: (context, index) => exerciseBuild(context, index),
               ),
       ),
+        ),
+
+        // Sits under the keyboard, so the toolbar's flat bottom edge and the
+        // keyboard's rounded corners meet on one colour instead of a wedge of
+        // scaffold background.
+        Positioned.fill(
+          child: _KeyboardBackdrop(color: widget.theme.colorScheme.surface),
+        ),
+      ],
     );
   }
 
@@ -330,7 +359,19 @@ class _WorkoutState extends State<Workout> {
 
               Padding(
                 padding: EdgeInsets.only(left: supersetGroup != null ? 4 : 0),
-                child: Theme(
+                // One toolbar for the whole exercise. Scoped here rather than to
+                // the page because the exercise list is lazy: a page-wide chain
+                // could step to a field that isn't built, and with scrolling
+                // disabled nothing would bring it into view. Everything inside an
+                // expanded tile is built, so this chain is always reachable.
+                child: KeyboardActions(
+                  disableScroll: true,
+                  config: buildKeyboardActionsConfig(
+                    context,
+                    widget.theme,
+                    context.read<ActiveWorkoutProvider>().keyboardChainForExercise(index),
+                  ),
+                  child: Theme(
           data: Theme.of(context).copyWith(
             dividerColor: Colors.transparent,
             listTileTheme: const ListTileThemeData(
@@ -566,6 +607,9 @@ class _WorkoutState extends State<Workout> {
                                 rpeController: context.read<ActiveWorkoutProvider>().workoutRpeTEC[index][setIndex][subSetIndex],
                                 repsController: context.read<ActiveWorkoutProvider>().workoutRepsTEC[index][setIndex][subSetIndex],
                                 weightController: context.read<ActiveWorkoutProvider>().workoutWeightTEC[index][setIndex][subSetIndex],
+                                rpeFocus: context.read<ActiveWorkoutProvider>().workoutRpeFocusNodes[index][setIndex][subSetIndex],
+                                repsFocus: context.read<ActiveWorkoutProvider>().workoutRepsFocusNodes[index][setIndex][subSetIndex],
+                                weightFocus: context.read<ActiveWorkoutProvider>().workoutWeightFocusNodes[index][setIndex][subSetIndex],
                                 //initiallyChecked: (context.read<Profile>().sets[primaryIndex][index][setIndex].loggedRecordID[subSetIndex] != null),
                                 recordID: context.read<Profile>().sets[primaryIndex][index][setIndex].loggedRecordID[subSetIndex],
                                 // either logs or unlogs a set
@@ -693,18 +737,20 @@ class _WorkoutState extends State<Workout> {
                                     if (isChecked) {
                                       // List<double> values; = context.read<Profile>().sets[primaryIndex][index][setIndex].rpe!;
                                       context.read<ActiveWorkoutProvider>().incrementSet([index, setIndex, subSetIndex]);
-                                      
+
                                       // Handle exeercise expansion/collapse
                                       if (context.read<ActiveWorkoutProvider>().nextSet[0] != index) {
-                                        context.read<ActiveWorkoutProvider>().workoutExpansionControllers[
-                                          context.read<ActiveWorkoutProvider>().nextSet[0]
-                                        ].expand();
-                                        context.read<ActiveWorkoutProvider>().expansionStates[
-                                          context.read<ActiveWorkoutProvider>().nextSet[0]
-                                        ] = true;
-
-                                        context.read<ActiveWorkoutProvider>().workoutExpansionControllers[index].collapse();
-                                        context.read<ActiveWorkoutProvider>().expansionStates[index] = false;
+                                        // On a PR, wait for the flash before moving on:
+                                        // collapsing the tile immediately hides the very
+                                        // thing we just lit up. Only ever delays on the
+                                        // last set of an exercise that earned a record.
+                                        if (prResult != null) {
+                                          Future.delayed(prFlashDuration, () {
+                                            if (mounted) setState(() => _advanceToNextExercise(index));
+                                          });
+                                        } else {
+                                          _advanceToNextExercise(index);
+                                        }
                                       }
                                     }
 
@@ -806,16 +852,11 @@ class _WorkoutState extends State<Workout> {
                           }
                         },
 
-                        child: KeyboardActions(
-                          disableScroll: true,
-                          config: buildKeyboardActionsConfig(
-                            context, 
-                            widget.theme, 
-                            [context.read<ActiveWorkoutProvider>().workoutNotesFocusNodes[index]]
-                          ),
-                          child: TextFormField(
+                        // Notes shares the exercise's KeyboardActions (see
+                        // exerciseBuild), so it is the last stop on the chain.
+                        child: TextFormField(
                             focusNode: context.read<ActiveWorkoutProvider>().workoutNotesFocusNodes[index],
-                          
+
                             keyboardType: TextInputType.multiline,
                             minLines: 2,
                             maxLines: null,
@@ -854,12 +895,12 @@ class _WorkoutState extends State<Workout> {
                             controller: context.read<ActiveWorkoutProvider>().workoutNotesTEC[index],
 
                           ),
-                        ),
                       ),
                     ),
                   ],
                 ),      // ExpansionTile
               ),        // Theme
+                ),      // KeyboardActions (one chain per exercise)
             ),          // Padding (offsets content past the superset bracket)
           ],            // Stack children
         ),              // Stack
@@ -1000,5 +1041,36 @@ class _WorkoutState extends State<Workout> {
 
     await db.updateSetNotes(sessionId: sessionID, exerciseId: exerciseID, note: note);
 
+  }
+}
+
+/// Fills the keyboard's own footprint with the toolbar's colour.
+///
+/// iOS rounds the keyboard's top corners, and the toolbar above it is a flat
+/// rectangle, which leaves a wedge at each corner showing whatever the page
+/// paints there. This covers that gap.
+///
+/// It reads the inset itself rather than letting the page do it, so the keyboard
+/// appearing rebuilds this strip alone and not the whole workout list.
+class _KeyboardBackdrop extends StatelessWidget {
+  const _KeyboardBackdrop({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final double keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
+    if (keyboardHeight <= 0) return const SizedBox.shrink();
+
+    return IgnorePointer(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: SizedBox(
+          height: keyboardHeight,
+          width: double.infinity,
+          child: ColoredBox(color: color),
+        ),
+      ),
+    );
   }
 }
