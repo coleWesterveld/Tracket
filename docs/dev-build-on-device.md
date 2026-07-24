@@ -1,59 +1,50 @@
-# Installing a dev build alongside the App Store app
+# Dev and prod builds side by side
 
-The App Store copy of Tracket and a local dev build can't share a bundle
-identifier — installing with the release ID overwrites the real app on the
-phone (and its database). To keep both on the device at once, temporarily
-swap the iOS bundle identifier to a dev-only one, build, then revert.
+The App Store app ("Tracket", `com.cole.tracket`) and a dev build
+("Tracket Dev", `com.example.coleAppTesting`) coexist on the phone, each with
+its own sandbox and SQLite database. Deploying dev updates the dev app in
+place, so its history is preserved; the App Store app is never touched.
 
-| | Bundle ID |
-|---|---|
-| Release / App Store | `com.cole.tracket` |
-| Local dev build | `com.example.coleAppTesting` |
+The old workflow of sed-ing `project.pbxproj` and reverting it is dead. Do
+not resurrect it: it broke once the widget extension arrived (two bundle IDs
+to swap, entitlements along for the ride) and once left dev IDs committed.
 
-## Steps
+## Usage
 
-1. Swap the identifier in all Runner AND widget extension configs. The match
-   deliberately has no trailing semicolon so it also catches the extension's
-   `com.cole.tracket.WorkoutWidget` (an extension's bundle ID must be prefixed
-   by its parent app's ID, or iOS refuses to embed it):
+```sh
+scripts/deploy.sh dev            # release build on Kevin as Tracket Dev
+scripts/deploy.sh dev "Phone 2"  # any other device name from `flutter devices`
+scripts/deploy.sh prod           # App Store .ipa as Tracket
+```
 
-   ```sh
-   sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.cole.tracket/PRODUCT_BUNDLE_IDENTIFIER = com.example.coleAppTesting/g' ios/Runner.xcodeproj/project.pbxproj
-   ```
+## How it works
 
-2. Build and install to the phone:
+Bundle ID and display name are xcconfig variables, resolved in
+`ios/Flutter/AppIdentity.xcconfig`:
 
-   ```sh
-   flutter run --release -d Kevin
-   ```
+- `AppIdentity-Prod.xcconfig` is the committed default: `com.cole.tracket`,
+  "Tracket". The widget extension's ID is derived as
+  `$(APP_BUNDLE_ID).WorkoutWidget` in the project file.
+- `AppIdentity-Dev.xcconfig` holds the dev identity.
+- `AppIdentity-Local.xcconfig` is a gitignored override. `deploy.sh dev`
+  writes it (one include line pointing at the dev file) for the duration of
+  the run and deletes it on exit.
 
-   `Kevin` is the phone's device name; `flutter devices` lists what's
-   connected, and plain `flutter run --release` works when it's the only
-   device attached.
-
-3. Revert before committing:
-
-   ```sh
-   git checkout -- ios/Runner.xcodeproj/project.pbxproj
-   ```
-
-   This touches only the project file, so any other in-progress work in the
-   tree is left alone. Confirm with `git status` that the pbxproj no longer
-   shows as modified — committing the dev identifier would break the next
-   App Store build.
+Because the override cannot be committed and is absent at rest, any build
+run outside the script, including a bare `flutter build ipa`, is prod.
 
 ## Notes
 
-- **This whole workflow is a candidate for replacement** by proper Xcode
-  flavors (a `dev` build configuration with its own bundle IDs, display name,
-  and App Group), driven by a deploy script, so nothing ever mutates
-  `project.pbxproj`. See discussion in `live-activity-design.md` era notes.
-
-- The dev app gets its own sandbox and therefore its own **empty database**.
-  Real workout history lives in the App Store app and will not appear in the
-  dev build. That's expected, not a bug.
-- To reverse the swap without discarding other edits to the project file, run
-  the `sed` with the two identifiers exchanged instead of using `git checkout`.
-- The `RunnerTests` target still uses the old template identifier
-  (`com.example.firstapp.RunnerTests`). It never ships, so the swap above
-  deliberately leaves it alone.
+- The dev app keeps its own database across deploys, same as any iOS app
+  update. Real workout history lives in the App Store app and will not
+  appear in the dev build. Expected, not a bug.
+- Both flavors currently share the App Group
+  `group.com.tracket.workoutwidget`. Live Activities do not use the group,
+  so this is harmless today. If the home-screen widget (branch
+  `feat/homescreen-widget`) ever ships, split the group per flavor first so
+  the two apps cannot clobber each other's shared widget data.
+- First dev deploy after the widget extension was added may hit a signing
+  error for `com.example.coleAppTesting.WorkoutWidget` (new app ID plus App
+  Group capability). If it does, open the project in Xcode once, select the
+  WorkoutWidgetExtension target's Signing tab, and let automatic signing
+  register it; the CLI works from then on.
