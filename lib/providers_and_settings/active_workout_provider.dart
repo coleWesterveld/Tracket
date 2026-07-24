@@ -35,6 +35,14 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   List<List<List<TextEditingController>>> workoutRepsTEC;
   List<TextEditingController> workoutNotesTEC;
   List<FocusNode> workoutNotesFocusNodes; // One focus node per exercise
+
+  // Set field focus lives here, not in GymSetRow, so the whole exercise can be
+  // wired into one keyboard toolbar: the chevrons need every node of the chain
+  // at once, and the rows can't hand each other nodes they own privately.
+  List<List<List<FocusNode>>> workoutRpeFocusNodes;
+  List<List<List<FocusNode>>> workoutWeightFocusNodes;
+  List<List<List<FocusNode>>> workoutRepsFocusNodes;
+
   List<ExpansibleController> workoutExpansionControllers;
 
   // this helps track the expansion states, SPECIFICALLY when for the device disconnects and the expansion tiles linked with the controllers will have been disposed
@@ -120,6 +128,9 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   ActiveWorkoutProvider({
     this.workoutNotesTEC = const <TextEditingController>[],
     this.workoutNotesFocusNodes = const <FocusNode>[],
+    this.workoutRpeFocusNodes = const <List<List<FocusNode>>>[],
+    this.workoutWeightFocusNodes = const <List<List<FocusNode>>>[],
+    this.workoutRepsFocusNodes = const <List<List<FocusNode>>>[],
     this.workoutRepsTEC = const <List<List<TextEditingController>>>[],
     this.workoutRpeTEC = const <List<List<TextEditingController>>>[],
     this.workoutWeightTEC = const <List<List<TextEditingController>>>[],
@@ -156,12 +167,18 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     for (var list2D in workoutRepsTEC) { for (var list1D in list2D) { for (var tec in list1D) { tec.dispose(); } } }
     for (var tec in workoutNotesTEC) { tec.dispose(); }
     for (var focusNode in workoutNotesFocusNodes) { focusNode.dispose(); }
+    for (var list2D in workoutRpeFocusNodes) { for (var list1D in list2D) { for (var node in list1D) { node.dispose(); } } }
+    for (var list2D in workoutWeightFocusNodes) { for (var list1D in list2D) { for (var node in list1D) { node.dispose(); } } }
+    for (var list2D in workoutRepsFocusNodes) { for (var list1D in list2D) { for (var node in list1D) { node.dispose(); } } }
     // ExpansionTileControllers might not need explicit dispose unless they hold resources
     workoutRpeTEC = [];
     workoutWeightTEC = [];
     workoutRepsTEC = [];
     workoutNotesTEC = [];
     workoutNotesFocusNodes = [];
+    workoutRpeFocusNodes = [];
+    workoutWeightFocusNodes = [];
+    workoutRepsFocusNodes = [];
     workoutExpansionControllers = []; // Resetting lists
     expansionStates = [];
   }
@@ -599,6 +616,11 @@ void _initializeStructuresForDay(int dayIdx) {
     growable: true,
   );
 
+  // Focus nodes for the set fields, shaped exactly like their TECs above
+  workoutRpeFocusNodes = _generateSetFocusNodes(dayIdx);
+  workoutWeightFocusNodes = _generateSetFocusNodes(dayIdx);
+  workoutRepsFocusNodes = _generateSetFocusNodes(dayIdx);
+
   // For Expansion Tile Controllers (one per exercise)
   workoutExpansionControllers = List.generate(
     programProvider.exercises[dayIdx].length,
@@ -613,6 +635,57 @@ void _initializeStructuresForDay(int dayIdx) {
 
   ////debugPrint("Structures initialized for day index: $dayIdx with ${programProvider.exercises[dayIdx].length} exercises.");
 }
+
+  /// One focus node per sub-set, in the same exercise/set/sub-set shape the
+  /// TECs use, so a node can always be found by the same three indices.
+  List<List<List<FocusNode>>> _generateSetFocusNodes(int dayIdx) {
+    return List.generate(
+      programProvider.exercises[dayIdx].length,
+      (exIdx) => List.generate(
+        programProvider.sets[dayIdx][exIdx].length,
+        (setIdx) => List.generate(
+          programProvider.sets[dayIdx][exIdx][setIdx].numSets,
+          (_) => FocusNode(),
+          growable: true,
+        ),
+        growable: true,
+      ),
+      growable: true,
+    );
+  }
+
+  /// The order the keyboard's chevrons step through one exercise: each set row
+  /// left to right (RPE, weight, reps), then the exercise's notes field last.
+  ///
+  /// Notes comes last because it is per exercise, not per set, so it is the one
+  /// field the user reaches only once the sets above it are done.
+  List<FocusNode> keyboardChainForExercise(int exerciseIndex) {
+    final chain = <FocusNode>[];
+
+    if (exerciseIndex < workoutRpeFocusNodes.length &&
+        exerciseIndex < workoutWeightFocusNodes.length &&
+        exerciseIndex < workoutRepsFocusNodes.length) {
+      final rpe = workoutRpeFocusNodes[exerciseIndex];
+      final weight = workoutWeightFocusNodes[exerciseIndex];
+      final reps = workoutRepsFocusNodes[exerciseIndex];
+
+      for (int setIdx = 0; setIdx < rpe.length; setIdx++) {
+        if (setIdx >= weight.length || setIdx >= reps.length) break;
+        for (int subSetIdx = 0; subSetIdx < rpe[setIdx].length; subSetIdx++) {
+          if (subSetIdx >= weight[setIdx].length || subSetIdx >= reps[setIdx].length) break;
+          chain.add(rpe[setIdx][subSetIdx]);
+          chain.add(weight[setIdx][subSetIdx]);
+          chain.add(reps[setIdx][subSetIdx]);
+        }
+      }
+    }
+
+    if (exerciseIndex < workoutNotesFocusNodes.length) {
+      chain.add(workoutNotesFocusNodes[exerciseIndex]);
+    }
+
+    return chain;
+  }
 
   // Call this from `update:` or a listener:
   void syncControllersForDay(int dayIndex) {
@@ -633,6 +706,9 @@ void _initializeStructuresForDay(int dayIdx) {
     ensureLength(workoutRpeTEC,    numExercises, () => <List<TextEditingController>>[]);
     ensureLength(workoutWeightTEC, numExercises, () => <List<TextEditingController>>[]);
     ensureLength(workoutRepsTEC,   numExercises, () => <List<TextEditingController>>[]);
+    ensureLength(workoutRpeFocusNodes,    numExercises, () => <List<FocusNode>>[]);
+    ensureLength(workoutWeightFocusNodes, numExercises, () => <List<FocusNode>>[]);
+    ensureLength(workoutRepsFocusNodes,   numExercises, () => <List<FocusNode>>[]);
     ensureLength(workoutExpansionControllers, numExercises, () => ExpansibleController());
     ensureLength(expansionStates, numExercises, () => false);
     ensureLength(isExerciseComplete, numExercises, () => false);
@@ -648,6 +724,9 @@ void _initializeStructuresForDay(int dayIdx) {
       ensureLength(workoutRpeTEC[i],    numSetEntries, () => <TextEditingController>[]);
       ensureLength(workoutWeightTEC[i], numSetEntries, () => <TextEditingController>[]);
       ensureLength(workoutRepsTEC[i],   numSetEntries, () => <TextEditingController>[]);
+      ensureLength(workoutRpeFocusNodes[i],    numSetEntries, () => <FocusNode>[]);
+      ensureLength(workoutWeightFocusNodes[i], numSetEntries, () => <FocusNode>[]);
+      ensureLength(workoutRepsFocusNodes[i],   numSetEntries, () => <FocusNode>[]);
     }
 
     // 3) Inner-list: one controller _per_ plannedSet.numSets
@@ -658,6 +737,9 @@ void _initializeStructuresForDay(int dayIdx) {
         ensureLength(workoutRpeTEC[i][j],    slots, () => TextEditingController());
         ensureLength(workoutWeightTEC[i][j], slots, () => TextEditingController());
         ensureLength(workoutRepsTEC[i][j],   slots, () => TextEditingController());
+        ensureLength(workoutRpeFocusNodes[i][j],    slots, () => FocusNode());
+        ensureLength(workoutWeightFocusNodes[i][j], slots, () => FocusNode());
+        ensureLength(workoutRepsFocusNodes[i][j],   slots, () => FocusNode());
       }
     }
 
