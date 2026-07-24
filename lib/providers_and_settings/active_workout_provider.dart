@@ -1,4 +1,6 @@
+import 'package:firstapp/live_activity/workout_live_activity.dart';
 import 'package:firstapp/other_utilities/ensure_length.dart';
+import 'package:firstapp/other_utilities/format_reps.dart';
 import 'package:firstapp/other_utilities/pr_detection.dart';
 import 'package:flutter/material.dart';
 //import 'data_saving.dart';
@@ -468,6 +470,8 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     activeDay = programProvider.split[activeDayIndex!]; // Ensure activeDay is also set
     showHistory = List.filled(programProvider.exercises[activeDayIndex!].length, false, growable: true); // Re-init showHistory if needed
     _calculateExerciseCompletion();
+    // Re-attach to (or re-create) the Lock Screen card for the restored workout.
+    _syncLiveActivity(starting: true);
     notifyListeners();
     ////debugPrint("Active workout state fully restored from snapshot.");
     return true;
@@ -504,6 +508,88 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     }
 
 
+  }
+
+  /// Builds the iOS Live Activity content payload from the current workout
+  /// state, or null when nothing valid is active.
+  ///
+  /// The current set is nextSet; dots come from logged records, so unlogging
+  /// a set empties its dot again. All indices are clamped because nextSet can
+  /// briefly outlive a program edit that shrank the day.
+  Map<String, dynamic>? _liveActivityPayload() {
+    if (activeDayIndex == null || workoutStartTime == null || sessionID == null) {
+      return null;
+    }
+    final dayIdx = activeDayIndex!;
+    if (dayIdx >= programProvider.exercises.length ||
+        dayIdx >= programProvider.sets.length) {
+      return null;
+    }
+    final exercises = programProvider.exercises[dayIdx];
+    final sets = programProvider.sets[dayIdx];
+    if (exercises.isEmpty || sets.isEmpty) return null;
+
+    final exIdx = nextSet[0].clamp(0, exercises.length - 1);
+    final clusters = sets[exIdx];
+    if (clusters.isEmpty) return null;
+    final setIdx = nextSet[1].clamp(0, clusters.length - 1);
+    final planned = clusters[setIdx];
+    final subIdx = nextSet[2].clamp(0, planned.numSets - 1);
+
+    // Position/count/done are across the whole exercise, not one cluster.
+    int setCount = 0;
+    int position = subIdx + 1;
+    int done = 0;
+    for (int i = 0; i < clusters.length; i++) {
+      setCount += clusters[i].numSets;
+      if (i < setIdx) position += clusters[i].numSets;
+      done += clusters[i].loggedRecordID.where((id) => id != null).length;
+    }
+
+    String target = '${formatRepRange(planned.setLower, planned.setUpper)} reps';
+    final rpe = planned.rpe;
+    if (rpe != null && rpe > 0) {
+      target = '$target @ RPE ${formatReps(rpe)}';
+    }
+
+    // "Next: X" appears only on the exercise's last set, when it is
+    // actually actionable.
+    String? nextExercise;
+    if (position == setCount && exIdx + 1 < exercises.length) {
+      nextExercise = exercises[exIdx + 1].exerciseTitle;
+    }
+
+    // The card shows a single line, and ActivityKit caps the whole payload
+    // at 4KB, so long notes get cut here.
+    String note = exercises[exIdx].notes.trim();
+    if (note.length > 140) note = note.substring(0, 140);
+
+    return {
+      'workoutName': activeDay?.dayTitle ?? 'Workout',
+      'exercise': exercises[exIdx].exerciseTitle,
+      'setPosition': position,
+      'setCount': setCount,
+      'setsDone': done,
+      'target': target,
+      'note': note,
+      'nextExercise': nextExercise,
+      'startedAt': workoutStartTime!.millisecondsSinceEpoch,
+      'lastSetAt': (lastRestStartTime ?? workoutStartTime!).millisecondsSinceEpoch,
+    };
+  }
+
+  /// Pushes the current state to the Live Activity. [starting] requests a new
+  /// activity (workout start, snapshot restore); otherwise it updates the one
+  /// on screen. A null payload ends whatever is showing.
+  void _syncLiveActivity({bool starting = false}) {
+    final payload = _liveActivityPayload();
+    if (payload == null) {
+      WorkoutLiveActivity.end();
+    } else if (starting) {
+      WorkoutLiveActivity.start(payload);
+    } else {
+      WorkoutLiveActivity.update(payload);
+    }
   }
 
   // Helper to start UI timer based on current pause state
@@ -769,6 +855,7 @@ void _initializeStructuresForDay(int dayIdx) {
       nextSet = [0,0,0]; // Reset nextSet
       shakeFinish = false;
       setPRs.clear(); // PRs are per session
+      _syncLiveActivity(starting: true);
 
     } else { // Clearing active day
       // Capture temp day info before clearing state
@@ -802,6 +889,7 @@ void _initializeStructuresForDay(int dayIdx) {
       // read this before the teardown runs.
       setPRs.clear();
       await clearActiveWorkoutState(); // Clear snapshot when workout is explicitly ended/cleared
+      WorkoutLiveActivity.end();
 
       // Delete the temporary day from DB and memory after all state is cleared
       if (wasTemporary && tempDayIndex != null) {
@@ -859,6 +947,7 @@ void _initializeStructuresForDay(int dayIdx) {
     lastRestStartTime = null;
     setPRs.clear(); // the sets those PRs came from were just deleted
     await clearActiveWorkoutState();
+    WorkoutLiveActivity.end();
 
     // Drop the one-off day too, if this was a free workout.
     if (wasTemporary && tempDayIndex != null) {
@@ -892,6 +981,9 @@ void _initializeStructuresForDay(int dayIdx) {
   // Your original togglePause remains useful
   void togglePause() {
     isPaused = !isPaused;
+    // Resync the card's clocks: pausing shifts the start timestamps forward
+    // each second, and this pushes the corrected anchors on resume.
+    _syncLiveActivity();
     notifyListeners();
     // Consider saving state on pause if app might be killed
     // saveActiveWorkoutState();
@@ -1000,6 +1092,10 @@ void _initializeStructuresForDay(int dayIdx) {
     _calculateExerciseCompletion();
     shakeFinish = isExerciseComplete.isNotEmpty && isExerciseComplete.every((c) => c);
 
+    // The set just logged (and possibly a new exercise) plus the freshly reset
+    // rest clock go out to the Lock Screen card.
+    _syncLiveActivity();
+
     notifyListeners();
   }
 
@@ -1010,6 +1106,8 @@ void _initializeStructuresForDay(int dayIdx) {
   void recalculateCompletion() {
     _calculateExerciseCompletion();
     shakeFinish = isExerciseComplete.isNotEmpty && isExerciseComplete.every((c) => c);
+    // Covers unlogging a set, which never goes through incrementSet.
+    _syncLiveActivity();
     notifyListeners();
   }
 }
