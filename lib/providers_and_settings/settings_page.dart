@@ -1,4 +1,3 @@
-import 'package:firstapp/data_io/calendar_export.dart';
 import 'package:firstapp/data_io/data_export_import.dart';
 import 'package:firstapp/notifications/notification_service.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
@@ -27,7 +26,6 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _exportLoading = false;
   bool _importLoading = false;
-  bool _icsLoading = false;
 
   Future<void> _exportData(BuildContext buttonContext) async {
     setState(() => _exportLoading = true);
@@ -45,34 +43,6 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     } finally {
       if (mounted) setState(() => _exportLoading = false);
-    }
-  }
-
-  Future<void> _exportCalendar(BuildContext buttonContext) async {
-    setState(() => _icsLoading = true);
-    final box = buttonContext.findRenderObject() as RenderBox?;
-    final origin = box != null
-        ? box.localToGlobal(Offset.zero) & box.size
-        : null;
-    try {
-      final useMetric = context.read<SettingsModel>().useMetric;
-      final hadData = await CalendarExport.exportWorkoutsAsIcs(
-        useMetric: useMetric,
-        sharePositionOrigin: origin,
-      );
-      if (!hadData && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No workout history to export yet.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Calendar export failed: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _icsLoading = false);
     }
   }
 
@@ -370,22 +340,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   label: const Text('Import Data'),
                 ),
               ],
-            ),
-
-            const SizedBox(height: 8),
-            Center(
-              child: Builder(
-                builder: (btnContext) => ElevatedButton.icon(
-                  onPressed: _icsLoading ? null : () => _exportCalendar(btnContext),
-                  icon: _icsLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.calendar_month),
-                  label: const Text('Export Workout Calendar (.ics)'),
-                ),
-              ),
             ),
 
             const Divider(thickness: 0.5),

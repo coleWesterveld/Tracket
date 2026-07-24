@@ -48,3 +48,6 @@ app.*.map.json
 android/key.properties
 *.jks
 *.keystore
+
+# App identity override written by scripts/deploy.sh, never committed
+ios/Flutter/AppIdentity-Local.xcconfig

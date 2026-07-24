@@ -1,0 +1,3 @@
+// Production identity: the App Store app.
+APP_BUNDLE_ID = com.cole.tracket
+APP_DISPLAY_NAME = Tracket

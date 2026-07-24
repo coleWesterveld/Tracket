@@ -1,0 +1,5 @@
+// Dev identity: installs alongside the App Store app with its own sandbox.
+// Same bundle ID the old sed workflow used, so an existing dev install (and
+// its SQLite database) is updated in place, never replaced.
+APP_BUNDLE_ID = com.example.coleAppTesting
+APP_DISPLAY_NAME = Tracket Dev

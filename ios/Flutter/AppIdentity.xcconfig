@@ -1,0 +1,7 @@
+// App identity resolution. Production is the committed default; a build is
+// switched to dev by the optional override file below, which is gitignored
+// and written or removed by scripts/deploy.sh. Later includes win in
+// xcconfig, so the override takes precedence when present. If the override
+// file is absent, every build (including plain flutter build ipa) is prod.
+#include "AppIdentity-Prod.xcconfig"
+#include? "AppIdentity-Local.xcconfig"
