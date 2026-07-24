@@ -30,6 +30,7 @@ import 'package:keyboard_actions/keyboard_actions.dart';
 // I think it may be more clear to change all imports to this package version
 // then again, idk if it really matters
 import 'package:firstapp/widgets/workout_stopwatch.dart';
+import 'package:firstapp/widgets/pr_badge.dart';
 
 class Workout extends StatefulWidget {
   final  ThemeData theme;
@@ -579,6 +580,53 @@ class _WorkoutState extends State<Workout> {
 
                                     // reset "rest since last set" stopwatch to zero once we log a set
                                     if (context.mounted) context.read<ActiveWorkoutProvider>().lastRestStartTime = DateTime.now();
+
+                                    // ── PR detection ──────────────────────────────────────
+                                    if (context.mounted) {
+                                      final exerciseId = context.read<Profile>()
+                                          .exercises[context.read<ActiveWorkoutProvider>().activeDayIndex!][index]
+                                          .exerciseID;
+                                      final exerciseName = context.read<Profile>()
+                                          .exercises[context.read<ActiveWorkoutProvider>().activeDayIndex!][index]
+                                          .exerciseTitle;
+                                      final loggedWeight = double.tryParse(
+                                        workoutProvider.workoutWeightTEC[index][setIndex][subSetIndex].text,
+                                      );
+                                      final loggedReps = double.tryParse(
+                                        workoutProvider.workoutRepsTEC[index][setIndex][subSetIndex].text,
+                                      );
+                                      final sessionId = context.read<ActiveWorkoutProvider>().sessionID;
+                                      final useMetric = context.read<SettingsModel>().useMetric;
+
+                                      if (loggedWeight != null && loggedReps != null) {
+                                        // Weight stored in DB is always lbs; convert logged value if needed
+                                        final weightInLbs = useMetric
+                                            ? loggedWeight * 2.20462
+                                            : loggedWeight;
+
+                                        final previousBest = await DatabaseHelper.instance.fetchPersonalBestWeight(
+                                          exerciseId: exerciseId,
+                                          reps: loggedReps,
+                                          excludeSessionId: sessionId,
+                                        );
+
+                                        // It's a PR if no previous best exists OR we beat the old record
+                                        final isPR = previousBest == null || weightInLbs > previousBest;
+
+                                        if (isPR && context.mounted) {
+                                          final displayWeight = loggedWeight.toStringAsFixed(
+                                            loggedWeight % 1 == 0 ? 0 : 1,
+                                          );
+                                          PRBannerOverlay.show(
+                                            context,
+                                            exerciseName: exerciseName,
+                                            weight: displayWeight,
+                                            unit: useMetric ? 'kg' : 'lbs',
+                                          );
+                                        }
+                                      }
+                                    }
+                                    // ─────────────────────────────────────────────────────
                                   
                                   } else{
                                     if (context.read<Profile>().sets[primaryIndex][index][setIndex].loggedRecordID[subSetIndex] != null){
