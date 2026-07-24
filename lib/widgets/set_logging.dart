@@ -1,5 +1,6 @@
 import 'package:firstapp/other_utilities/decimal_input_formatter.dart';
 import 'package:firstapp/other_utilities/format_reps.dart';
+import 'package:firstapp/other_utilities/keyboard_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -720,6 +721,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                     controller: controller,
                     focusNode: focusNode,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    scrollPadding: kKeyboardScrollPadding,
 
                     style: TextStyle(
                       fontSize: 14,

@@ -2,6 +2,23 @@ import 'package:keyboard_actions/keyboard_actions.dart';
 import "package:flutter/material.dart";
 
 
+/// Height of the bar the keyboard_actions package draws above the keyboard.
+/// Matches its own default, which we don't override.
+const double kKeyboardBarHeight = 45.0;
+
+/// Keeps a focused field clear of the keyboard AND the bar above it.
+///
+/// Flutter scrolls a focused field into view on its own, but it only knows to
+/// clear the keyboard: the bar is an overlay it can't see, so without this the
+/// field lands underneath it. Pass to every field the bar appears over.
+const EdgeInsets kKeyboardScrollPadding = EdgeInsets.only(
+  left: 20,
+  top: 20,
+  right: 20,
+  bottom: kKeyboardBarHeight + 20, // 20 being Flutter's own default breathing room
+);
+
+
 /// The bar that sits above the keyboard for numeric fields, which on iOS have
 /// no return key of their own and so otherwise offer no way out.
 ///
@@ -16,7 +33,6 @@ import "package:flutter/material.dart";
 KeyboardActionsConfig buildKeyboardActionsConfig(BuildContext context, ThemeData theme, List<FocusNode> nodes) {
   return KeyboardActionsConfig(
     keyboardBarColor: theme.colorScheme.surface,
-    keyboardSeparatorColor: theme.colorScheme.outlineVariant,
     keyboardActionsPlatform: KeyboardActionsPlatform.IOS,
     // The package's own arrows point up and down, which reads wrong for fields
     // laid out left to right. Ours are in the toolbar below instead.

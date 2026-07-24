@@ -857,6 +857,11 @@ class _WorkoutState extends State<Workout> {
                         child: TextFormField(
                             focusNode: context.read<ActiveWorkoutProvider>().workoutNotesFocusNodes[index],
 
+                            // Notes is the tallest field and sits lowest in the
+                            // card, so it is the one that ends up under the
+                            // keyboard without this.
+                            scrollPadding: kKeyboardScrollPadding,
+
                             keyboardType: TextInputType.multiline,
                             minLines: 2,
                             maxLines: null,
