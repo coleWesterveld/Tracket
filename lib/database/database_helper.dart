@@ -1822,6 +1822,38 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 
 
   }
+  /// Returns the best (heaviest) weight ever logged for [exerciseId] at
+  /// exactly [reps] reps, excluding any sets from [excludeSessionId].
+  ///
+  /// Used for PR detection during a workout: if the just-logged weight
+  /// exceeds this value, the set is a personal record.
+  ///
+  /// Weight is always returned in LBS (the internal storage unit); callers
+  /// that display in kg should convert with [lbToKg].
+  Future<double?> fetchPersonalBestWeight({
+    required int exerciseId,
+    required double reps,
+    String? excludeSessionId,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+
+    String where = 'exercise_id = ? AND reps = ?';
+    final List<Object?> args = [exerciseId, reps];
+
+    if (excludeSessionId != null) {
+      where += ' AND session_id != ?';
+      args.add(excludeSessionId);
+    }
+
+    final rows = await db.rawQuery(
+      'SELECT MAX(weight) as best FROM set_log WHERE $where',
+      args,
+    );
+
+    if (rows.isEmpty || rows.first['best'] == null) return null;
+    return (rows.first['best'] as num).toDouble();
+  }
+
   // close database
   Future close() async {
     final db = await instance.database;
