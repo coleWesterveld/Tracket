@@ -320,7 +320,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                     _buildTextFieldWithConfirmation(
                       widget.rpeController,
                       rpeFocus,
-                      "",
+                      "RPE",
                       35,
                       _rpeError,
                       "rpe",
@@ -329,7 +329,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                     _buildTextFieldWithConfirmation(
                       widget.weightController,
                       weightFocus,
-                      "",
+                      "Wt",
                       50,
                       _weightError,
                       "weight",
@@ -338,7 +338,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                     _buildTextFieldWithConfirmation(
                       widget.repsController,
                       repsFocus,
-                      "",
+                      "Reps",
                       40,
                       _repsError,
                       "reps",
@@ -433,7 +433,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                       _buildTextFieldWithConfirmation(
                         widget.rpeController,
                         rpeFocus,
-                        "",
+                        "RPE",
                         quarterWidth,
                         _rpeError,
                         "rpe",
@@ -442,7 +442,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                       _buildTextFieldWithConfirmation(
                         widget.weightController,
                         weightFocus,
-                        "",
+                        "Weight",
                         halfWidth,
                         _weightError,
                         "weight",
@@ -451,7 +451,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
                       _buildTextFieldWithConfirmation(
                         widget.repsController,
                         repsFocus,
-                        "",
+                        "Reps",
                         quarterWidth,
                         _repsError,
                         "reps",
