@@ -261,15 +261,16 @@ class DataExportImport {
       final plannedSets = (data['plannedSets'] as List).cast<Map<String, dynamic>>();
       final exercises = (data['exercises'] as List).cast<Map<String, dynamic>>();
 
-      // Build a map of old exercise IDs -> exercise titles for matching
-      final oldExerciseIdToTitle = <int, String>{};
+      // Build a map of old exercise IDs -> full exercise data for matching/creation
+      final oldExerciseIdToData = <int, Map<String, dynamic>>{};
       for (final ex in exercises) {
-        oldExerciseIdToTitle[ex['id'] as int] = ex['exercise_title'] as String;
+        oldExerciseIdToData[ex['id'] as int] = ex;
       }
 
       // Match exercises by title to find the correct IDs in this device's DB
       final titleToLocalId = <String, int>{};
-      for (final title in oldExerciseIdToTitle.values) {
+      for (final ex in exercises) {
+        final title = ex['exercise_title'] as String;
         final localEx = await db.query(
           'exercises',
           where: 'exercise_title = ?',
@@ -281,14 +282,27 @@ class DataExportImport {
         }
       }
 
-      // Create the old exercise ID -> new local ID map
+      // Create the old exercise ID -> new local ID map.
+      // For exercises not found locally (e.g. user-created on another device),
+      // insert them so the program import is complete.
       final exerciseIdMap = <int, int>{};
-      for (final entry in oldExerciseIdToTitle.entries) {
-        final localId = titleToLocalId[entry.value];
+      for (final entry in oldExerciseIdToData.entries) {
+        final oldId = entry.key;
+        final exData = entry.value;
+        final title = exData['exercise_title'] as String;
+        final localId = titleToLocalId[title];
         if (localId != null) {
-          exerciseIdMap[entry.key] = localId;
+          exerciseIdMap[oldId] = localId;
+        } else {
+          // Exercise doesn't exist locally — create it so the program imports fully.
+          final newId = await db.insert('exercises', {
+            'exercise_title': title,
+            'muscles_worked': exData['muscles_worked'] as String? ?? '',
+            'persistent_note': exData['persistent_note'] as String? ?? '',
+          });
+          exerciseIdMap[oldId] = newId;
+          titleToLocalId[title] = newId;
         }
-        // If exercise doesn't exist locally, we skip it (exercise_instance won't be created)
       }
 
       return await db.transaction((txn) async {
@@ -325,7 +339,7 @@ class DataExportImport {
 
           final oldExerciseId = inst['exercise_id'] as int;
           final newExerciseId = exerciseIdMap[oldExerciseId];
-          if (newExerciseId == null) continue; // exercise not found locally
+          if (newExerciseId == null) continue; // shouldn't happen — all exercises are mapped above
 
           final oldInstId = inst['id'] as int;
           final newInstId = await txn.insert('exercise_instances', {
