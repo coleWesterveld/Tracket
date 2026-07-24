@@ -3,5 +3,12 @@
 // and written or removed by scripts/deploy.sh. Later includes win in
 // xcconfig, so the override takes precedence when present. If the override
 // file is absent, every build (including plain flutter build ipa) is prod.
+// The widget extension uses this file as its base config and has no other
+// link to Flutter's build settings, unlike Runner which reaches them through
+// Debug/Release.xcconfig. It needs FLUTTER_BUILD_NAME and FLUTTER_BUILD_NUMBER
+// so the extension stamps the same version as the app: App Store Connect
+// rejects an upload whose appex version does not match its host.
+#include "Generated.xcconfig"
+
 #include "AppIdentity-Prod.xcconfig"
 #include? "AppIdentity-Local.xcconfig"
