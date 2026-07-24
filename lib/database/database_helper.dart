@@ -28,6 +28,7 @@ import 'dart:math'; // For random variations
 import '../other_utilities/day_of_week.dart';
 import 'package:firstapp/other_utilities/time_strings.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
+import 'package:firstapp/other_utilities/pr_detection.dart';
 
 
 // you may notice that I have separate methods to insert exercises, lists of exercises, and same with sets, 
@@ -431,29 +432,29 @@ class DatabaseHelper {
       // ── 26-week history (ends ≥14 days ago, 2 sessions/week per day type) ─────
       final List<String> pushNotes = [
         'Good session, bench felt smooth. Kept form tight throughout.',
-        'Shoulders a bit tight — used closer grip on OHP.',
+        'Shoulders a bit tight, used closer grip on OHP.',
         'Hit a PR on bench! All 3 sets felt controlled.',
         'Low energy but pushed through. Glad I showed up.',
         'Wrist wraps made a big difference on OHP today.',
         'Chest pump was great. Kept rest short.',
-        'Paused reps on bench — really helped the bottom.',
+        'Paused reps on bench, really helped the bottom.',
         '',
       ];
       final List<String> pullNotes = [
-        'Pull-ups getting stronger — added a rep on every set.',
+        'Pull-ups getting stronger: added a rep on every set.',
         'Back felt pumped. Rows were heavy but form was solid.',
         'Focused on squeezing at the top of each pull-up.',
-        'Grip was failing on rows — chalk next time.',
+        'Grip was failing on rows, chalk next time.',
         '',
         'Biceps blew up on hammer curls today.',
       ];
       final List<String> legsNotes = [
         'Good depth on squats. Knees tracked well over toes.',
-        'Quads on fire after leg press — excellent session.',
+        'Quads on fire after leg press. Excellent session.',
         'Added 5 lbs to squats. Heavy but stayed tight.',
         '',
         'Paused squats felt amazing, really loaded up the quads.',
-        'RDL weight is climbing — hamstrings have never felt this strong.',
+        'RDL weight is climbing: hamstrings have never felt this strong.',
         '',
       ];
 
@@ -561,7 +562,7 @@ class DatabaseHelper {
         final DateTime d  = DateTime(d0.year, d0.month, d0.day, 18, 0);
         addPullSession('pull_recent', d,
           8.0, 145.0, 120.0, 50.0, 50.0,
-          'Good pump. Rows felt heavy — progress on track.');
+          'Good pump. Rows felt heavy, progress on track.');
       }
       // Legs recent: 2 days ago
       {
@@ -1822,36 +1823,56 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 
 
   }
-  /// Returns the best (heaviest) weight ever logged for [exerciseId] at
-  /// exactly [reps] reps, excluding any sets from [excludeSessionId].
+  /// Summarizes the logged history of [exerciseId] so a just-logged set can be
+  /// judged as a personal record - see [ExercisePRSnapshot.evaluate].
   ///
-  /// Used for PR detection during a workout: if the just-logged weight
-  /// exceeds this value, the set is a personal record.
+  /// [weightLbs] is the weight of the set being judged: the rep record only
+  /// looks at sets logged at that same weight. [excludeRecordId] is the row of
+  /// the set being judged, so it is never compared against itself. Sets logged
+  /// earlier in the same session DO count, so repeating a PR set does not fire
+  /// the badge a second time.
   ///
-  /// Weight is always returned in LBS (the internal storage unit); callers
-  /// that display in kg should convert with [lbToKg].
-  Future<double?> fetchPersonalBestWeight({
+  /// Weights are in LBS (the internal storage unit); callers that display in kg
+  /// should convert with [lbToKg].
+  Future<ExercisePRSnapshot> fetchPRSnapshot({
     required int exerciseId,
-    required double reps,
-    String? excludeSessionId,
+    required double weightLbs,
+    int? excludeRecordId,
   }) async {
     final db = await DatabaseHelper.instance.database;
 
-    String where = 'exercise_id = ? AND reps = ?';
-    final List<Object?> args = [exerciseId, reps];
+    String where = 'exercise_id = ?';
+    // The weight arg is bound first - it appears in the SELECT, ahead of WHERE.
+    final List<Object?> args = [weightLbs, exerciseId];
 
-    if (excludeSessionId != null) {
-      where += ' AND session_id != ?';
-      args.add(excludeSessionId);
+    if (excludeRecordId != null) {
+      where += ' AND id != ?';
+      args.add(excludeRecordId);
     }
 
-    final rows = await db.rawQuery(
-      'SELECT MAX(weight) as best FROM set_log WHERE $where',
-      args,
-    );
+    final rows = await db.rawQuery('''
+      SELECT
+        COUNT(*) AS prior_sets,
+        MAX(weight) AS best_weight,
+        MAX(CASE WHEN ABS(weight - ?) < 0.0001 THEN reps END) AS best_reps_at_weight
+      FROM set_log
+      WHERE $where
+    ''', args);
 
-    if (rows.isEmpty || rows.first['best'] == null) return null;
-    return (rows.first['best'] as num).toDouble();
+    if (rows.isEmpty) {
+      return const ExercisePRSnapshot(
+        priorSetCount: 0,
+        bestWeight: null,
+        bestRepsAtWeight: null,
+      );
+    }
+
+    final row = rows.first;
+    return ExercisePRSnapshot(
+      priorSetCount: (row['prior_sets'] as num?)?.toInt() ?? 0,
+      bestWeight: (row['best_weight'] as num?)?.toDouble(),
+      bestRepsAtWeight: (row['best_reps_at_weight'] as num?)?.toDouble(),
+    );
   }
 
   // close database

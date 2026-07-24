@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import 'custom_exercise_form.dart';
+import 'app_message.dart';
 
 // TODO: the add custom exercise should maybe pop conditionally, default to true
 // the current functionality in the analytics page is stupid
@@ -71,12 +72,7 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
     } catch (e) {
       //debugPrint('Error deleting exercise: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error deleting exercise: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showAppMessage(context, 'Error deleting exercise: $e', isError: true);
       }
     }
   }

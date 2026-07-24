@@ -198,7 +198,7 @@ class WorkoutControlBar extends StatelessWidget {
         title: const Text("Discard this workout?"),
         content: const Text(
           "Everything you logged this session will be deleted and can't be "
-          "recovered.\n\nIf you want to keep it, tap Finish instead — a half-done "
+          "recovered.\n\nIf you want to keep it, tap Finish instead. A half-done "
           "workout still logs.",
         ),
         actions: [

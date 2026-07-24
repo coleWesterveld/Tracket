@@ -163,7 +163,7 @@ class _ProgramsDrawerState extends State<ProgramsDrawer> {
             ...StarterPrograms.templates.map((template) => ListTile(
               leading: const Icon(Icons.fitness_center),
               title: Text(template.title),
-              subtitle: Text('${template.daysPerWeek} days/week — ${template.description}'),
+              subtitle: Text('${template.daysPerWeek} days/week: ${template.description}'),
               onTap: () async {
                 Navigator.pop(context); // close bottom sheet
                 final result = await StarterPrograms.addProgram(template);

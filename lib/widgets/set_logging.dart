@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:firstapp/providers_and_settings/program_provider.dart';
 import '../providers_and_settings/settings_provider.dart';
 import 'package:firstapp/widgets/shake_widget.dart';
+import 'package:firstapp/widgets/app_message.dart';
 import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
 import 'dart:async'; // For Timer
 import 'package:keyboard_actions/keyboard_actions.dart';
@@ -243,9 +244,7 @@ class GymSetRowState extends State<GymSetRow> with SingleTickerProviderStateMixi
       _initialRepsOnFocus = widget.repsController.text;
       _initialRpeOnFocus = widget.rpeController.text;
     } else if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to update set"), duration: Duration(seconds: 2)),
-      );
+      showAppMessage(context, "Failed to update set", isError: true);
     }
   }
 
