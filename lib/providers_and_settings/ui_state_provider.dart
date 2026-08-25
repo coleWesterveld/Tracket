@@ -25,6 +25,10 @@ import 'package:flutter/material.dart';
 enum ExerciseSearchOwner { none, workout, program, analytics }
 
 class UiStateProvider extends ChangeNotifier {
+  /// Index of the analytics tab in the root IndexedStack. Named because the
+  /// analytics page has to know when it is the visible tab.
+  static const int analyticsPageIndex = 3;
+
   int _currentPageIndex = 0;
   bool _isAddingGoal = false;
   bool _isDisplayingChart = false;
@@ -124,10 +128,17 @@ class UiStateProvider extends ChangeNotifier {
   }
 
   set currentPageIndex(int newIndex){
-    assert(currentPageIndex >= 0 && currentPageIndex <= 3, "current page index $newIndex is not an index of a page. please use index 0-4.");
+    assert(newIndex >= 0 && newIndex <= analyticsPageIndex, "current page index $newIndex is not an index of a page. please use index 0-3.");
+
+    // Tapping the tab you are already on does nothing. Every tap used to
+    // notify, and the pages listening for that rebuilt and refetched: spamming
+    // the analytics button ran the goals query (one round trip per goal) again
+    // for each press.
+    if (_currentPageIndex == newIndex) return;
+
     resetAppBarConfig();
     _currentPageIndex = newIndex;
-    
+
     notifyListeners();
   }
 

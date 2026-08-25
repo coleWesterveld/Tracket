@@ -284,7 +284,12 @@ class _ProgramsDrawerState extends State<ProgramsDrawer> {
                         selected: program.programID == widget.currentProgramId,
                         selectedTileColor: widget.theme.colorScheme.outline,
                         onTap: () {
-                          widget.onProgramSelected(program);
+                          // Picking the program you are already on just closes
+                          // the drawer. Reselecting it used to reload the whole
+                          // profile from the database for no change.
+                          if (program.programID != widget.currentProgramId) {
+                            widget.onProgramSelected(program);
+                          }
                           Navigator.pop(context);
                         },
                         onLongPress: () {
