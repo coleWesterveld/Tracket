@@ -193,6 +193,11 @@ class _DisplayWorkoutState extends State<DisplayWorkout> {
   @override
   Widget build(BuildContext context) {
 
+    // Nothing to draw, and the date line below reads the first entry. Callers
+    // are expected to catch this themselves, but a session with no sets in it
+    // is not worth taking the screen down over.
+    if (widget.exerciseHistory.isEmpty) return const SizedBox.shrink();
+
     final settings = context.read<SettingsModel>();
     return Container(
 
