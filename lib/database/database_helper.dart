@@ -1783,6 +1783,44 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
   }
 
 
+  // Every set logged in one session, grouped the way the calendar card groups a
+  // day: identical sets collapse into a single row carrying a count.
+  //
+  // The finish screen cannot reuse [getSetsForDay]. That one is keyed on the
+  // date, so a morning session and an evening session would merge into one
+  // card. Finishing the second workout of the day should show the second
+  // workout of the day.
+  Future<List<SetRecord>> getSetsForSession(
+    String sessionId, {
+    bool useMetric = false,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    final results = await db.rawQuery('''
+      SELECT 
+        *,
+        COUNT(*) as num_sets
+      FROM set_log
+      WHERE session_id = ?
+      GROUP BY exercise_id, reps, weight, rpe
+      ORDER BY date, exercise_id
+    ''', [sessionId]);
+
+    return results.map((r) => SetRecord(
+      reps: r['reps'] as double,
+      weight: useMetric ? lbToKg(pounds: r['weight'] as double) : r['weight'] as double,
+      rpe: r['rpe'] as double,
+      numSets: r['num_sets'] as int,
+      sessionID: r['session_id'] as String,
+      exerciseID: r['exercise_id'] as int,
+      date: r['date'] as String,
+      historyNote: r['history_note'] as String? ?? '',
+      recordID: r['id'] as int,
+      dayTitle: r['day_title'] as String,
+      programTitle: r['program_title'] as String,
+    )).toList();
+  }
+
+
   Future<int> updateSetRecord(
     int setRecordId, Map<String, dynamic> newValues) async {
     final db = await DatabaseHelper.instance.database;
@@ -1858,6 +1896,54 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
       FROM set_log
       WHERE $where
     ''', args);
+
+    if (rows.isEmpty) {
+      return const ExercisePRSnapshot(
+        priorSetCount: 0,
+        bestWeight: null,
+        bestRepsAtWeight: null,
+      );
+    }
+
+    final row = rows.first;
+    return ExercisePRSnapshot(
+      priorSetCount: (row['prior_sets'] as num?)?.toInt() ?? 0,
+      bestWeight: (row['best_weight'] as num?)?.toDouble(),
+      bestRepsAtWeight: (row['best_reps_at_weight'] as num?)?.toDouble(),
+    );
+  }
+
+  /// The exercise's records as they stood BEFORE [sessionId] began.
+  ///
+  /// [fetchPRSnapshot] deliberately counts sets logged earlier in the same
+  /// session, which is right for the badge during a workout: repeating a PR set
+  /// should not fire it a second time. It is wrong for the summary. Working up
+  /// 185, 195, 205 makes each set beat the one before it, so the last would
+  /// report beating 195 - a number set twenty minutes earlier, in this very
+  /// session. The summary has to quote the record the user walked in with.
+  ///
+  /// Both bests come back null when the exercise has no history outside this
+  /// session, which happens when a brand new exercise's second set beats its
+  /// first. There is a real record there, but nothing honest to say it beat.
+  ///
+  /// Weights are LBS, the storage unit; callers displaying kg convert with
+  /// [lbToKg].
+  Future<ExercisePRSnapshot> fetchPreSessionBest({
+    required int exerciseId,
+    required String sessionId,
+    required double weightLbs,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+
+    // The weight arg is bound first - it appears in the SELECT, ahead of WHERE.
+    final rows = await db.rawQuery('''
+      SELECT
+        COUNT(*) AS prior_sets,
+        MAX(weight) AS best_weight,
+        MAX(CASE WHEN ABS(weight - ?) < 0.0001 THEN reps END) AS best_reps_at_weight
+      FROM set_log
+      WHERE exercise_id = ? AND session_id != ?
+    ''', [weightLbs, exerciseId, sessionId]);
 
     if (rows.isEmpty) {
       return const ExercisePRSnapshot(
