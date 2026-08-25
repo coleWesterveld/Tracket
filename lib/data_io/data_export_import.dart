@@ -97,7 +97,12 @@ class DataExportImport {
       final db = await DatabaseHelper.instance.database;
 
       await db.transaction((txn) async {
-        await txn.execute('PRAGMA foreign_keys = OFF');
+        // `PRAGMA foreign_keys` is a no-op once a transaction is open, so the
+        // usual off/on dance would do nothing here. `defer_foreign_keys` is the
+        // transaction-scoped equivalent: constraints are still checked, just at
+        // COMMIT instead of per statement, so the table-by-table wipe below is
+        // allowed to be briefly inconsistent.
+        await txn.execute('PRAGMA defer_foreign_keys = ON');
 
         // Delete in reverse FK dependency order
         for (final table in [
@@ -125,7 +130,7 @@ class DataExportImport {
           }
         }
 
-        await txn.execute('PRAGMA foreign_keys = ON');
+        // defer_foreign_keys resets itself at the end of the transaction.
       });
 
       return ImportResult.success();
@@ -251,6 +256,10 @@ class DataExportImport {
   }
 
   /// Import a program from parsed JSON data. Used by both file import and starter programs.
+  ///
+  /// Everything happens in one transaction: if any part of the file cannot be
+  /// read, nothing at all is written. A half-imported program is worse than a
+  /// failed import, because the user has no way to tell it is incomplete.
   static Future<ImportResult> importProgramFromJson(Map<String, dynamic> data) async {
     try {
       final db = await DatabaseHelper.instance.database;
@@ -261,52 +270,77 @@ class DataExportImport {
       final plannedSets = (data['plannedSets'] as List).cast<Map<String, dynamic>>();
       final exercises = (data['exercises'] as List).cast<Map<String, dynamic>>();
 
-      // Build a map of old exercise IDs -> full exercise data for matching/creation
-      final oldExerciseIdToData = <int, Map<String, dynamic>>{};
-      for (final ex in exercises) {
-        oldExerciseIdToData[ex['id'] as int] = ex;
-      }
-
-      // Match exercises by title to find the correct IDs in this device's DB
-      final titleToLocalId = <String, int>{};
-      for (final ex in exercises) {
-        final title = ex['exercise_title'] as String;
-        final localEx = await db.query(
-          'exercises',
-          where: 'exercise_title = ?',
-          whereArgs: [title],
-          limit: 1,
-        );
-        if (localEx.isNotEmpty) {
-          titleToLocalId[title] = localEx.first['id'] as int;
-        }
-      }
-
-      // Create the old exercise ID -> new local ID map.
-      // For exercises not found locally (e.g. user-created on another device),
-      // insert them so the program import is complete.
-      final exerciseIdMap = <int, int>{};
-      for (final entry in oldExerciseIdToData.entries) {
-        final oldId = entry.key;
-        final exData = entry.value;
-        final title = exData['exercise_title'] as String;
-        final localId = titleToLocalId[title];
-        if (localId != null) {
-          exerciseIdMap[oldId] = localId;
-        } else {
-          // Exercise doesn't exist locally — create it so the program imports fully.
-          final newId = await db.insert('exercises', {
-            'exercise_title': title,
-            'muscles_worked': exData['muscles_worked'] as String? ?? '',
-            'persistent_note': exData['persistent_note'] as String? ?? '',
-          });
-          exerciseIdMap[oldId] = newId;
-          titleToLocalId[title] = newId;
-        }
-      }
-
       return await db.transaction((txn) async {
-        // Insert the program
+        // ── Resolve the file's exercises onto this device's library ──
+        //
+        // Read the whole library once and match in memory, rather than a query
+        // per exercise. Matching is on a normalised title, so "barbell bench
+        // press" from another device lands on the local "Barbell Bench Press"
+        // instead of creating a near-duplicate the user then has to live with.
+        final localExercises = await txn.query(
+          'exercises',
+          columns: ['id', 'exercise_title', 'muscles_worked', 'persistent_note'],
+          orderBy: 'id ASC',
+        );
+
+        // Oldest row wins on a tie, which is the seeded one if a duplicate
+        // already crept in before this matching existed.
+        final localByTitle = <String, Map<String, Object?>>{};
+        for (final row in localExercises) {
+          localByTitle.putIfAbsent(_matchKey(row['exercise_title'] as String), () => row);
+        }
+
+        final exerciseIdMap = <int, int>{};
+        var exercisesCreated = 0;
+
+        for (final ex in exercises) {
+          final oldId = ex['id'] as int;
+          final title = (ex['exercise_title'] as String).trim();
+          final muscles = ((ex['muscles_worked'] as String?) ?? '').trim();
+          final note = ((ex['persistent_note'] as String?) ?? '').trim();
+          final key = _matchKey(title);
+
+          final local = localByTitle[key];
+          if (local != null) {
+            final localId = local['id'] as int;
+            exerciseIdMap[oldId] = localId;
+
+            // Fill in what the local copy is missing, never overwrite. If the
+            // sharer filled in the muscles worked and this device left it blank,
+            // take theirs; if this device already has something, it wins.
+            final updates = <String, Object?>{};
+            if (((local['muscles_worked'] as String?) ?? '').trim().isEmpty &&
+                muscles.isNotEmpty) {
+              updates['muscles_worked'] = muscles;
+            }
+            if (((local['persistent_note'] as String?) ?? '').trim().isEmpty &&
+                note.isNotEmpty) {
+              updates['persistent_note'] = note;
+            }
+            if (updates.isNotEmpty) {
+              await txn.update('exercises', updates, where: 'id = ?', whereArgs: [localId]);
+              localByTitle[key] = {...local, ...updates};
+            }
+          } else {
+            // Not in this library: a custom exercise from the sharer's device.
+            // Create it so the program imports whole.
+            final newId = await txn.insert('exercises', {
+              'exercise_title': title,
+              'muscles_worked': muscles,
+              'persistent_note': note,
+            });
+            exerciseIdMap[oldId] = newId;
+            localByTitle[key] = {
+              'id': newId,
+              'exercise_title': title,
+              'muscles_worked': muscles,
+              'persistent_note': note,
+            };
+            exercisesCreated++;
+          }
+        }
+
+        // ── Insert the program ──
         final newProgramId = await txn.insert('programs', {
           'program_title': programData['program_title'],
         });
@@ -335,11 +369,19 @@ class DataExportImport {
         for (final inst in exerciseInstances) {
           final oldDayId = inst['day_id'] as int;
           final newDayId = dayIdMap[oldDayId];
-          if (newDayId == null) continue;
+          // Every instance in a well-formed file belongs to a day in that file,
+          // and every exercise it names is in the file's exercise list. Bail out
+          // rather than drop the row: dropping would leave a hole in the day
+          // that the user cannot see and we cannot explain.
+          if (newDayId == null) {
+            throw const _DamagedShareFile('an exercise belongs to a day that is not in the file');
+          }
 
           final oldExerciseId = inst['exercise_id'] as int;
           final newExerciseId = exerciseIdMap[oldExerciseId];
-          if (newExerciseId == null) continue; // shouldn't happen — all exercises are mapped above
+          if (newExerciseId == null) {
+            throw const _DamagedShareFile('an exercise is missing from the file');
+          }
 
           final oldInstId = inst['id'] as int;
           final newInstId = await txn.insert('exercise_instances', {
@@ -366,6 +408,9 @@ class DataExportImport {
         // otherwise it would point at an unrelated row (or nothing) after import.
         for (final entry in oldSupersetGroupByOldInst.entries) {
           final newInstId = instanceIdMap[entry.key];
+          // A group id can legitimately dangle: deleting the first exercise of a
+          // superset leaves the rest pointing at an id that is gone. That is not
+          // a damaged file, so drop the grouping and keep the exercise.
           final newGroupId = instanceIdMap[entry.value];
           if (newInstId == null || newGroupId == null) continue;
 
@@ -381,7 +426,9 @@ class DataExportImport {
         for (final set in plannedSets) {
           final oldInstId = set['exercise_instance_id'] as int;
           final newInstId = instanceIdMap[oldInstId];
-          if (newInstId == null) continue;
+          if (newInstId == null) {
+            throw const _DamagedShareFile('a set belongs to an exercise that is not in the file');
+          }
 
           await txn.insert('plannedSets', {
             'exercise_instance_id': newInstId,
@@ -393,12 +440,34 @@ class DataExportImport {
           });
         }
 
-        return ImportResult.success(programId: newProgramId);
+        return ImportResult.success(
+          programId: newProgramId,
+          exercisesCreated: exercisesCreated,
+        );
       });
+    } on _DamagedShareFile catch (e) {
+      // The transaction has rolled back, so nothing was written.
+      return ImportResult.error(
+        'This program file is incomplete, so nothing was imported (${e.detail}).',
+      );
     } catch (e) {
       return ImportResult.error(e.toString());
     }
   }
+
+  /// Key two exercise titles are matched on across devices. Case and spacing
+  /// vary with whoever typed it; the words do not.
+  static String _matchKey(String title) =>
+      title.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+}
+
+/// Thrown when a share file refers to rows it does not contain. Private because
+/// callers should see [ImportResult.errorMessage], not the exception.
+class _DamagedShareFile implements Exception {
+  final String detail;
+  const _DamagedShareFile(this.detail);
+  @override
+  String toString() => 'Damaged share file: $detail';
 }
 
 class ImportResult {
@@ -407,15 +476,26 @@ class ImportResult {
   final String? errorMessage;
   final int? programId; // For program imports, the new program's ID
 
+  /// Exercises the import had to add to this device's library because the
+  /// shared program used them and they were not here. Worth telling the user
+  /// about: their exercise list changed, not just their programs.
+  final int exercisesCreated;
+
   ImportResult._({
     required this.success,
     required this.cancelled,
     this.errorMessage,
     this.programId,
+    this.exercisesCreated = 0,
   });
 
-  factory ImportResult.success({int? programId}) =>
-      ImportResult._(success: true, cancelled: false, programId: programId);
+  factory ImportResult.success({int? programId, int exercisesCreated = 0}) =>
+      ImportResult._(
+        success: true,
+        cancelled: false,
+        programId: programId,
+        exercisesCreated: exercisesCreated,
+      );
   factory ImportResult.cancelled() =>
       ImportResult._(success: false, cancelled: true);
   factory ImportResult.error(String message) =>

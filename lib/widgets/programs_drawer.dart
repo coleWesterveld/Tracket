@@ -110,8 +110,17 @@ class _ProgramsDrawerState extends State<ProgramsDrawer> {
       final newProgram = await dbHelper.fetchProgramById(result.programId!);
       widget.onProgramSelected(newProgram);
       if (mounted) {
+        // A shared program can bring exercises this device has never seen. Say
+        // so, since the user's exercise list quietly grew.
+        final added = result.exercisesCreated;
+        final message = added == 0
+            ? '"${newProgram.programTitle}" imported!'
+            : added == 1
+                ? '"${newProgram.programTitle}" imported. 1 new exercise added to your list.'
+                : '"${newProgram.programTitle}" imported. $added new exercises added to your list.';
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('"${newProgram.programTitle}" imported!')),
+          SnackBar(content: Text(message)),
         );
         setState(() {}); // refresh the list
       }
