@@ -29,6 +29,8 @@ import 'package:firstapp/widgets/programs_drawer.dart';
 import 'package:firstapp/providers_and_settings/settings_page.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
 import 'widgets/calendar_bottom_sheet.dart';
+import 'live_activity/workout_live_activity.dart';
+import 'workout_page/finish_workout.dart';
 
 
 // a lil bit of fun when the user finishes a workout
@@ -348,7 +350,33 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
           if (!activeWorkoutP.isPaused && (activeWorkoutP.timer == null || !activeWorkoutP.timer!.isActive)) {
               activeWorkoutP.startTimers(); // Ensure UI timer is running if workout is active
           }
+          _drainPendingFinish();
       }
+    }
+  }
+
+  /// True while a Live Activity finish is being handled, so a resume that
+  /// lands mid-flow (the summary page is a fullscreen dialog) can't run it
+  /// a second time.
+  bool _finishing = false;
+
+  /// Runs the finish flow if the user tapped Finish on the Live Activity card.
+  /// The native side sets the flag when it opens `tracket://finish`; this is
+  /// the only thing that clears it.
+  Future<void> _drainPendingFinish() async {
+    if (_finishing || !mounted) return;
+    // Check for a workout BEFORE taking the flag: taking it clears it, and on
+    // a cold launch this can run before the snapshot has been restored.
+    if (context.read<ActiveWorkoutProvider>().sessionID == null) return;
+
+    _finishing = true;
+    try {
+      if (!await WorkoutLiveActivity.takePendingFinish()) return;
+      if (!mounted) return;
+      if (context.read<ActiveWorkoutProvider>().sessionID == null) return;
+      await finishActiveWorkout(context);
+    } finally {
+      _finishing = false;
     }
   }
 
@@ -456,6 +484,10 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
       bool restored = await activeWorkoutP.restoreFromSnapshot(snapshot);
 
       if (restored && mounted) {
+        // Cold launch from the Live Activity's Finish pill lands here: the
+        // resumed lifecycle event has already been and gone by the time the
+        // snapshot is back, so this is the only place that can catch it.
+        _drainPendingFinish();
         ////debugPrint("MainScaffold: Workout session resumed. UI should react.");
         // NO explicit navigation here from MainScaffold.
         // The UI (e.g., WorkoutSelectionPage or the initial page in your NavigationBar)

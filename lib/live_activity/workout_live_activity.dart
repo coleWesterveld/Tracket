@@ -25,6 +25,24 @@ class WorkoutLiveActivity {
   /// Ends the activity on finish or discard.
   static void end() => _invoke('end');
 
+  /// True once after the card's Finish pill was tapped, then false again.
+  ///
+  /// The pill opens `tracket://finish`, which the native side records as a
+  /// flag rather than pushing to Dart, because the URL can land during a cold
+  /// launch before the engine exists. Draining it on resume covers that and a
+  /// warm foreground alike. See [finishActiveWorkout] for what happens next.
+  static Future<bool> takePendingFinish() async {
+    if (kIsWeb || !Platform.isIOS) return false;
+    try {
+      return await _channel.invokeMethod<bool>('takePendingFinish') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException catch (e) {
+      debugPrint('Live Activity takePendingFinish failed: ${e.message}');
+      return false;
+    }
+  }
+
   static Future<void> _invoke(String method, [Map<String, dynamic>? args]) async {
     if (kIsWeb || !Platform.isIOS) return;
     try {

@@ -5,9 +5,10 @@
 // the Dart half is lib/live_activity/workout_live_activity.dart.
 //
 // Methods:
-//   start  - request the activity (or adopt one that survived a relaunch)
-//   update - push a new content state to every live activity of this type
-//   end    - end them all immediately
+//   start             - request the activity (or adopt one that survived a relaunch)
+//   update            - push a new content state to every live activity of this type
+//   end               - end them all immediately
+//   takePendingFinish - true once after the card's Finish pill was tapped
 //
 // All methods succeed silently on OS versions without ActivityKit or when the
 // user has disabled Live Activities: the workout works fine without the card.
@@ -19,6 +20,13 @@ import Foundation
 final class LiveActivityBridge: NSObject {
     static let channelName = "tracket/workout_live_activity"
 
+    /// Set when the card's Finish pill deep-links back in, cleared the first
+    /// time Dart asks for it. The flag is the single source of truth rather
+    /// than a push to Dart, because the URL can arrive during a cold launch,
+    /// before the engine exists. Dart drains it on every resume, which covers
+    /// both that case and a warm foreground.
+    private var pendingFinish = false
+
     func register(with messenger: FlutterBinaryMessenger) {
         let channel = FlutterMethodChannel(name: Self.channelName, binaryMessenger: messenger)
         channel.setMethodCallHandler { [weak self] call, result in
@@ -26,7 +34,27 @@ final class LiveActivityBridge: NSObject {
         }
     }
 
+    /// Handles a `tracket://` URL. Returns false for anything it does not own,
+    /// so AppDelegate can pass it on.
+    @discardableResult
+    func handle(url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "tracket", url.host?.lowercased() == "finish" else {
+            return false
+        }
+        pendingFinish = true
+        return true
+    }
+
     private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // Answered on every OS version: it is just a flag, and the Dart side
+        // polls it on resume whether or not ActivityKit exists.
+        if call.method == "takePendingFinish" {
+            let wasPending = pendingFinish
+            pendingFinish = false
+            result(wasPending)
+            return
+        }
+
         guard #available(iOS 16.2, *) else {
             result(nil)
             return

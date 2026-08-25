@@ -25,6 +25,18 @@ import flutter_local_notifications
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  // The Live Activity's Finish pill opens tracket://finish. The bridge only
+  // records it; the Dart side drains the flag on its next resume and runs the
+  // real finish flow, so the summary screen still gets shown.
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    if liveActivityBridge.handle(url: url) { return true }
+    return super.application(app, open: url, options: options)
+  }
+
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "LiveActivityBridge") {
