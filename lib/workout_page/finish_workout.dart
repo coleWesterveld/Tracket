@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers_and_settings/active_workout_provider.dart';
 import '../providers_and_settings/program_provider.dart';
 import '../providers_and_settings/settings_provider.dart';
+import '../home_widget/home_screen_widget.dart';
 import 'workout_summary.dart';
 import 'workout_summary_page.dart';
 
@@ -25,11 +26,15 @@ Future<void> finishActiveWorkout(
 
   // Snapshot the session BEFORE anything is torn down: the lines below null
   // the stopwatch and clear the PR marks, and the summary cannot get them back.
+  // The providers are read up front for the same reason: this function pops a
+  // route partway through, after which the context may no longer be usable.
   final navigator = Navigator.of(context, rootNavigator: true);
+  final profile = context.read<Profile>();
+  final settings = context.read<SettingsModel>();
   final summary = await buildWorkoutSummary(
     workout: activeWorkout,
-    profile: context.read<Profile>(),
-    useMetric: context.read<SettingsModel>().useMetric,
+    profile: profile,
+    useMetric: settings.useMetric,
   );
 
   activeWorkout.workoutStartTime = null;
@@ -39,6 +44,13 @@ Future<void> finishActiveWorkout(
   if (popFirst && context.mounted) Navigator.pop(context, true);
 
   activeWorkout.setActiveDayAndStartNew(null);
+
+  // Fill today's circle in on the home screen widget and roll "Next up" on to
+  // the following session. Nothing here waits on it.
+  HomeScreenWidget.refreshNow(
+    profile: profile,
+    settings: settings,
+  );
 
   // Nothing logged means nothing to show. Finishing an empty workout should
   // just close.

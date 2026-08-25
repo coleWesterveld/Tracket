@@ -1,5 +1,22 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:firstapp/other_utilities/pr_detection.dart';
 import 'package:firstapp/workout_page/workout_summary.dart';
+
+PRCandidate weightPR(int exercise, double weight, {double reps = 5}) =>
+    PRCandidate(
+      exerciseIndex: exercise,
+      kind: PRKind.weight,
+      weight: weight,
+      reps: reps,
+    );
+
+PRCandidate repsPR(int exercise, double reps, {double weight = 50}) =>
+    PRCandidate(
+      exerciseIndex: exercise,
+      kind: PRKind.reps,
+      weight: weight,
+      reps: reps,
+    );
 
 SummaryComparison compare({
   required double weight,
@@ -97,6 +114,120 @@ void main() {
 
       expect(c.weightDiff, 0);
       expect(c.repsDiff, 3);
+    });
+  });
+
+  group('finish summary record rollup', () {
+    test('a session with no records rolls up to nothing', () {
+      expect(rollUpPRs([]), isEmpty);
+    });
+
+    test('working up to a top single is one record, not three', () {
+      // The case the per-set marks get wrong. Each set clears the bar the one
+      // before it just raised, so all three are marked during the workout.
+      final rolled = rollUpPRs([
+        weightPR(0, 185),
+        weightPR(0, 195),
+        weightPR(0, 205),
+      ]);
+
+      expect(rolled.length, 1);
+      expect(rolled[0]!.weight, 205);
+    });
+
+    test('the best is kept whatever order the sets arrive in', () {
+      final rolled = rollUpPRs([
+        weightPR(0, 205),
+        weightPR(0, 185),
+      ]);
+
+      expect(rolled[0]!.weight, 205);
+    });
+
+    test('a rep record keeps the most reps', () {
+      final rolled = rollUpPRs([
+        repsPR(0, 12),
+        repsPR(0, 14),
+        repsPR(0, 13),
+      ]);
+
+      expect(rolled.length, 1);
+      expect(rolled[0]!.reps, 14);
+      expect(rolled[0]!.kind, PRKind.reps);
+    });
+
+    test('weight beats reps on the same exercise, reps logged first', () {
+      final rolled = rollUpPRs([
+        repsPR(0, 14, weight: 50),
+        weightPR(0, 60),
+      ]);
+
+      expect(rolled.length, 1);
+      expect(rolled[0]!.kind, PRKind.weight);
+      expect(rolled[0]!.weight, 60);
+    });
+
+    test('weight beats reps on the same exercise, weight logged first', () {
+      // Order must not decide it, or the same session could report either one.
+      final rolled = rollUpPRs([
+        weightPR(0, 60),
+        repsPR(0, 14, weight: 50),
+      ]);
+
+      expect(rolled[0]!.kind, PRKind.weight);
+      expect(rolled[0]!.weight, 60);
+    });
+
+    test('a heavier weight record still wins after a rep record', () {
+      final rolled = rollUpPRs([
+        weightPR(0, 60),
+        repsPR(0, 14, weight: 50),
+        weightPR(0, 65),
+      ]);
+
+      expect(rolled[0]!.kind, PRKind.weight);
+      expect(rolled[0]!.weight, 65);
+    });
+
+    test('different exercises each keep their own record', () {
+      final rolled = rollUpPRs([
+        weightPR(0, 205),
+        repsPR(2, 14),
+        weightPR(0, 185),
+      ]);
+
+      expect(rolled.keys.toList()..sort(), [0, 2]);
+      expect(rolled[0]!.weight, 205);
+      expect(rolled[2]!.kind, PRKind.reps);
+    });
+
+    test('a candidate marked none is not a record', () {
+      final rolled = rollUpPRs([
+        const PRCandidate(
+          exerciseIndex: 0,
+          kind: PRKind.none,
+          weight: 205,
+          reps: 5,
+        ),
+      ]);
+
+      expect(rolled, isEmpty);
+    });
+
+    test('none never displaces a real record', () {
+      final rolled = rollUpPRs([
+        weightPR(0, 205),
+        const PRCandidate(
+          exerciseIndex: 0,
+          kind: PRKind.none,
+          weight: 999,
+          reps: 5,
+        ),
+      ]);
+
+      expect(rolled.length, 1);
+      expect(rolled[0]!.weight, 205);
+      expect(rolled[0]!.kind, PRKind.weight);
     });
   });
 }

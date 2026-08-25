@@ -16,6 +16,7 @@
 		5EF3109030140A100069D576 /* WorkoutActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF3108F30140A100069D576 /* WorkoutActivityAttributes.swift */; };
 		5EF3109130140A100069D576 /* WorkoutActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF3108F30140A100069D576 /* WorkoutActivityAttributes.swift */; };
 		5EF3109330140A100069D576 /* LiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF3109230140A100069D576 /* LiveActivityBridge.swift */; };
+		5EF310B1301409AB0069D576 /* HomeWidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF310B0301409AB0069D576 /* HomeWidgetBridge.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		859ED04482E161AE94912407 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B92BE01517B11EEF68C401AA /* Pods_RunnerTests.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
@@ -85,6 +86,7 @@
 		5EF31085301409D70069D576 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		5EF3108F30140A100069D576 /* WorkoutActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WorkoutActivityAttributes.swift; path = Shared/WorkoutActivityAttributes.swift; sourceTree = "<group>"; };
 		5EF3109230140A100069D576 /* LiveActivityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityBridge.swift; sourceTree = "<group>"; };
+		5EF310B0301409AB0069D576 /* HomeWidgetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeWidgetBridge.swift; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -223,6 +225,7 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				5EF3109230140A100069D576 /* LiveActivityBridge.swift */,
+				5EF310B0301409AB0069D576 /* HomeWidgetBridge.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -495,6 +498,7 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				5EF3109330140A100069D576 /* LiveActivityBridge.swift in Sources */,
+				5EF310B1301409AB0069D576 /* HomeWidgetBridge.swift in Sources */,
 				5EF3109030140A100069D576 /* WorkoutActivityAttributes.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
