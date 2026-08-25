@@ -7,6 +7,7 @@ import 'package:firstapp/widgets/exercise_search.dart';
 import 'package:firstapp/widgets/superset_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import '../providers_and_settings/program_provider.dart';
 import '../widgets/set_logging.dart';
@@ -145,16 +146,31 @@ class _WorkoutState extends State<Workout> {
     awp.expansionStates[finishedIndex] = false;
   }
 
-  void _handleExerciseSelected(Map<String, dynamic> exercise) async {
+  /// Adds the exercise the user picked out of the search to the day in progress.
+  ///
+  /// The search awaits this and only closes once it returns, so the whole write
+  /// happens while the search is still the screen on top. Every failure ends in
+  /// a message: silently returning is what made this look like "I picked one
+  /// and nothing happened".
+  Future<void> _handleExerciseSelected(Map<String, dynamic> exercise) async {
     final activeDayIndex = context.read<ActiveWorkoutProvider>().activeDayIndex;
-    if (activeDayIndex == null) return;
+    if (activeDayIndex == null) {
+      showAppMessage(context, "No workout is active, so there's nothing to add to.", isError: true);
+      return;
+    }
+
+    final int? exerciseId = exercise['exercise_id'] as int?;
+    if (exerciseId == null) {
+      showAppMessage(context, "Couldn't add exercise, please try again.", isError: true);
+      return;
+    }
 
     // Await the append BEFORE sizing controllers so the in-memory lists and the
     // parallel controller arrays stay in lockstep (otherwise -> RangeError when
     // exerciseBuild indexes the new last item).
     final bool ok = await context.read<Profile>().exerciseAppend(
       index: activeDayIndex,
-      exerciseId: exercise['exercise_id'],
+      exerciseId: exerciseId,
     );
 
     if (!mounted) return;
@@ -164,13 +180,54 @@ class _WorkoutState extends State<Workout> {
       return;
     }
 
-    // Sync controllers to include the new exercise
-    context.read<ActiveWorkoutProvider>().syncControllersForDay(activeDayIndex);
+    final profile = context.read<Profile>();
+    final int newIndex = profile.exercises[activeDayIndex].length - 1;
+
+    // An exercise you went to the trouble of adding mid-workout is one you are
+    // about to do, so it opens with a set ready to log rather than empty. The
+    // target comes from the same prefill the program editor uses.
+    final SetTarget prefill = profile.prefillTargetFor(activeDayIndex, newIndex);
+    final bool setOk = await profile.setsAppend(
+      index1: activeDayIndex,
+      index2: newIndex,
+      setLower: prefill.setLower,
+      setUpper: prefill.setUpper,
+      rpe: prefill.rpe,
+    );
+
+    if (!mounted) return;
+    if (!setOk) {
+      showAppMessage(context, "Added the exercise, but couldn't add a set to it.", isError: true);
+    }
+
+    // Sync controllers to include the new exercise and its set.
+    final awp = context.read<ActiveWorkoutProvider>();
+    awp.syncControllersForDay(activeDayIndex);
+
+    // A brand new exercise has nothing logged, so the day is no longer finished
+    // and the Lock Screen card has a new "Next:" to show.
+    awp.recalculateCompletion();
 
     // Fetch history for the newly-added exercise so its previous weights/reps
     // show immediately without leaving and rejoining the workout (#5).
     await _preloadHistory();
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+
+    // Open the new tile once it exists. Seeing it expand is also the clearest
+    // possible confirmation that the add actually landed.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final awp = context.read<ActiveWorkoutProvider>();
+      if (newIndex >= awp.workoutExpansionControllers.length) return;
+      try {
+        awp.workoutExpansionControllers[newIndex].expand();
+        awp.expansionStates[newIndex] = true;
+      } catch (_) {
+        // Tile not attached yet (scrolled out of the lazy list) — the stored
+        // expansion state still opens it when it is built.
+      }
+    });
   }
 
   @override
@@ -181,20 +238,18 @@ class _WorkoutState extends State<Workout> {
 
     int? primaryIndex = workoutProvider.activeDayIndex;
 
-    return uiState.isChoosingExercise
+    return uiState.isSearchingExerciseFor(ExerciseSearchOwner.workout)
     ? SafeArea(
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         body: Stack(
           children: [ExerciseSearchWidget(
             theme: widget.theme,
-            onExerciseSelected: (exercise){
-              _handleExerciseSelected(exercise);
-            },
-          
-            onSearchModeChanged: (isSearching) {
+            onExerciseSelected: _handleExerciseSelected,
+
+            onDismiss: () {
               setState(() {
-                uiState.isChoosingExercise = isSearching;          
+                uiState.exerciseSearchOwner = ExerciseSearchOwner.none;
               });
             },
           ),]
@@ -282,7 +337,8 @@ class _WorkoutState extends State<Workout> {
               onPressed: () async {
                 //debugPrint("allo? ");
                 if (context.read<SettingsModel>().hapticsEnabled) HapticFeedback.heavyImpact();
-                context.read<UiStateProvider>().isChoosingExercise = true;
+                context.read<UiStateProvider>().exerciseSearchOwner =
+                    ExerciseSearchOwner.workout;
                 setState(() {});
               },
             
@@ -327,23 +383,68 @@ class _WorkoutState extends State<Workout> {
     final String? supersetLabel =
         context.watch<Profile>().supersetLabel(primaryIndex, index);
 
+    // read, not watch, for the same reason as isNextSet above: skip only changes
+    // through the swipe action below, which calls setState itself.
+    final bool isSkipped = context.read<ActiveWorkoutProvider>().isSkipped(index);
+
     return Padding(
       key: ValueKey(context.watch<Profile>().exercises[primaryIndex][index]),
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4),
-      child: Container(
+      // Swipe left to set an exercise aside for today. Session only: nothing is
+      // logged and the program is untouched, so the same swipe brings it back.
+      // Same Slidable idiom the program editor uses for delete.
+      child: Slidable(
+        key: ValueKey(
+          'skip-${context.read<Profile>().exercises[primaryIndex][index].id}',
+        ),
+        closeOnScroll: true,
+        direction: Axis.horizontal,
+        endActionPane: ActionPane(
+          extentRatio: 0.3,
+          motion: const ScrollMotion(),
+          children: [
+            SlidableAction(
+              backgroundColor: isSkipped
+                  ? widget.theme.colorScheme.primary
+                  : widget.theme.colorScheme.secondary,
+              foregroundColor: isSkipped
+                  ? widget.theme.colorScheme.onPrimary
+                  : widget.theme.colorScheme.onSecondary,
+              icon: isSkipped ? Icons.undo : Icons.skip_next,
+              label: isSkipped ? 'Undo' : 'Skip',
+              onPressed: (_) {
+                if (context.read<SettingsModel>().hapticsEnabled) {
+                  HapticFeedback.heavyImpact();
+                }
+                context.read<ActiveWorkoutProvider>().toggleSkip(index);
+                setState(() {});
+              },
+            ),
+          ],
+        ),
+        child: Container(
         decoration: BoxDecoration(
           border: Border.all(
-            width: isNextSet ? 2 : 1,
-            color: isNextSet
+            width: (isNextSet && !isSkipped) ? 2 : 1,
+            color: (isNextSet && !isSkipped)
                 ? widget.theme.colorScheme.primary
                 : widget.theme.colorScheme.outline,
           ),
-          color: context.read<ActiveWorkoutProvider>().isExerciseComplete[index]
+          // Skipped reads as set aside, not as finished, so it keeps the plain
+          // surface instead of the completed tint.
+          color: (!isSkipped &&
+                  context.read<ActiveWorkoutProvider>().isExerciseComplete[index])
             ? widget.theme.colorScheme.primary.withAlpha((255 * 0.25).round())
             :widget.theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12.0),
         ),
-        child: ClipRRect(
+        child: IgnorePointer(
+          // Greyed out and inert for the rest of the session. The swipe still
+          // works, because Slidable sits outside this.
+          ignoring: isSkipped,
+          child: Opacity(
+            opacity: isSkipped ? 0.4 : 1.0,
+            child: ClipRRect(
           borderRadius: BorderRadius.circular(12.0),
           child: Stack(
             children: [
@@ -428,6 +529,19 @@ class _WorkoutState extends State<Workout> {
                             Icons.emoji_events,
                             size: 16,
                             color: accentOrange,
+                          ),
+                        ],
+                        // Says why the card is greyed out, so a skipped
+                        // exercise never reads as a rendering glitch.
+                        if (isSkipped) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            "Skipped",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: widget.theme.colorScheme.onSurface,
+                            ),
                           ),
                         ],
                       ],
@@ -798,14 +912,22 @@ class _WorkoutState extends State<Workout> {
                                       const BorderRadius.all(Radius.circular(8))),
                             ),
                             onPressed: () async {
+                              // Same prefill the program editor uses: the last set
+                              // of this exercise, else the last target touched
+                              // anywhere, else a neutral range. Beats the fixed
+                              // 5-12 @ 9 this used to hard-code.
+                              final profile = context.read<Profile>();
+                              final SetTarget prefill =
+                                  profile.prefillTargetFor(primaryIndex, index);
+
                               // Await BEFORE syncing controllers so arrays stay in
                               // lockstep with the in-memory sets list (RC#1).
-                              final bool ok = await context.read<Profile>().setsAppend(
+                              final bool ok = await profile.setsAppend(
                                     index1: primaryIndex,
                                     index2: index,
-                                    setLower: 5,
-                                    setUpper: 12,
-                                    rpe: 9,
+                                    setLower: prefill.setLower,
+                                    setUpper: prefill.setUpper,
+                                    rpe: prefill.rpe,
                                   );
 
                               if (!mounted) return;
@@ -815,9 +937,14 @@ class _WorkoutState extends State<Workout> {
                               }
 
                               // Sync controllers to include the new set
-                              context.read<ActiveWorkoutProvider>().syncControllersForDay(primaryIndex);
+                              final awp = context.read<ActiveWorkoutProvider>();
+                              awp.syncControllersForDay(primaryIndex);
 
-                              context.read<ActiveWorkoutProvider>().isExerciseComplete[index] = false;
+                              // Re-derive completion rather than poking the flag by
+                              // hand: this also pushes the new set count out to the
+                              // Lock Screen card, which used to keep saying "Set 2
+                              // of 2" after a third was added.
+                              awp.recalculateCompletion();
                               setState(() {});
                             },
                             label: Row(
@@ -910,7 +1037,10 @@ class _WorkoutState extends State<Workout> {
           ],            // Stack children
         ),              // Stack
       ),                // ClipRRect
+          ),            // Opacity (dims a skipped exercise)
+        ),              // IgnorePointer
       ),                // Container
+      ),                // Slidable (swipe left to skip / un-skip)
     );
   }
 

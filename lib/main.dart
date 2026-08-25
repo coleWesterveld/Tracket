@@ -174,11 +174,18 @@ class _MainPage extends State<GymApp>{
                   relocatedIndex < programProvider.exercises.length &&
                   relocatedIndex < programProvider.sets.length) {
                 // Follow the day to its (possibly new) index.
+                //
+                // syncLiveActivity here is what keeps the Lock Screen card
+                // honest: this runs on every Profile change, so a set added, an
+                // exercise added, a target edited or a day renamed mid-workout
+                // all reach the card without each call site remembering to push.
+                // Identical payloads are dropped inside the provider.
                 previousActiveWorkoutProvider
                 ..programProvider = programProvider
                 ..activeDayIndex = relocatedIndex
                 ..activeDay = programProvider.split[relocatedIndex]
-                ..syncControllersForDay(relocatedIndex);
+                ..syncControllersForDay(relocatedIndex)
+                ..syncLiveActivity();
               } else {
                 // The active day no longer exists (deleted) — clear the workout
                 ////debugPrint("Active workout cleared: active day no longer exists");

@@ -298,7 +298,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       body: Stack(
         children: [
           // Show analytics content with the persistent search bar only when not searching.
-          if (!uiState.isChoosingExercise && !uiState.isAddingGoal)
+          if (!uiState.isSearchingExerciseFor(ExerciseSearchOwner.analytics) &&
+              !uiState.isAddingGoal)
             Column(
               children: [
                 if (!uiState.isDisplayingChart) _buildPersistentSearchBar(context),
@@ -311,7 +312,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ),
 
           // When search is active, show the full-screen search overlay.
-          if (uiState.isChoosingExercise) _buildFullScreenSearch(context),
+          if (uiState.isSearchingExerciseFor(ExerciseSearchOwner.analytics))
+            _buildFullScreenSearch(context),
           if (uiState.isAddingGoal) _createGoal(context),
         ],
       ),
@@ -319,14 +321,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   // Callback when an exercise is selected - get history from the database
-  void _handleExerciseSelected(Map<String, dynamic> exercise) async {
+  Future<void> _handleExerciseSelected(Map<String, dynamic> exercise) async {
     ////debugPrint("ran");
     _loadExerciseHistory(exercise);
   }
 
   // When a goal is being added and the user selected the exercise for the goal to be for
   // This brings up the selector for target weight
-  void _exerciseForGoalSelected(Map<String, dynamic> exercise) async {
+  Future<void> _exerciseForGoalSelected(Map<String, dynamic> exercise) async {
     final dbHelper = DatabaseHelper.instance;
     final exerciseName = exercise['exercise_title'];
     final useMetric = context.read<SettingsModel>().useMetric;
@@ -932,7 +934,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: InkWell(
         onTap: () {
           setState(() {
-            uiState.isChoosingExercise = true;
+            uiState.exerciseSearchOwner = ExerciseSearchOwner.analytics;
           });
         },
         child: Container(
@@ -980,19 +982,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
     return ExerciseSearchWidget(
       theme: widget.theme,
-      onExerciseSelected: (exercise){
+      onExerciseSelected: (exercise) async {
         setState(() {
           _exercise = exercise;
           uiState.isDisplayingChart = true;
         });
-        _handleExerciseSelected(exercise);
-
-       // _exerciseHistory = _handleExerciseSelected(exercise);
+        await _handleExerciseSelected(exercise);
       },
 
-      onSearchModeChanged: (isSearching) {
+      onDismiss: () {
         setState(() {
-          uiState.isChoosingExercise = isSearching;          
+          uiState.exerciseSearchOwner = ExerciseSearchOwner.none;
         });
       },
     );
@@ -1004,9 +1004,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
     return ExerciseSearchWidget(
       onExerciseSelected: _exerciseForGoalSelected,
-      onSearchModeChanged: (isSearching) {
+      onDismiss: () {
         setState(() {
-          uiState.isAddingGoal = isSearching;
+          uiState.isAddingGoal = false;
         });
       },
       theme: widget.theme,

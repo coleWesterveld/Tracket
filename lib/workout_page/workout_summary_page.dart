@@ -61,6 +61,30 @@ class WorkoutSummaryPage extends StatelessWidget {
                         (c) => _ComparisonRow(comparison: c, summary: summary, theme: theme),
                       ),
                     ],
+                    // What was deliberately set aside. Quiet and last: it is
+                    // context for the numbers above, not a scolding.
+                    if (summary.skipped.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.skip_next,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withAlpha(150),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              "Skipped: ${summary.skipped.join(', ')}",
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: theme.colorScheme.onSurface.withAlpha(150),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

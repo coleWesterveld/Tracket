@@ -37,6 +37,11 @@ class ActiveWorkoutSnapshot {
   /// simply restore with none.
   final Map<String, String>? setPRs;
 
+  /// Which exercises were swiped away for this session, one flag per exercise
+  /// in day order. Optional - snapshots written before skip existed restore
+  /// with nothing skipped.
+  final List<bool>? skippedExercises;
+
   ActiveWorkoutSnapshot({
     required this.sessionID,
     required this.activeDayIndex,
@@ -49,6 +54,7 @@ class ActiveWorkoutSnapshot {
     this.exerciseExpansionStates,
     this.loggedRecordIDs,
     this.setPRs,
+    this.skippedExercises,
   });
 
   factory ActiveWorkoutSnapshot.fromJson(Map<String, dynamic> json) {
@@ -82,6 +88,9 @@ class ActiveWorkoutSnapshot {
       setPRs: json['setPRs'] != null
           ? Map<String, String>.from(json['setPRs'] as Map)
           : null,
+      skippedExercises: json['skippedExercises'] != null
+          ? List<bool>.from(json['skippedExercises'] as List)
+          : null,
     );
   }
 
@@ -96,5 +105,6 @@ class ActiveWorkoutSnapshot {
     'exerciseExpansionStates': exerciseExpansionStates,
     'loggedRecordIDs': loggedRecordIDs, // Add to JSON (jsonEncode handles List<List<List<int?>>> fine)
     'setPRs': setPRs,
+    'skippedExercises': skippedExercises,
   };
 }
