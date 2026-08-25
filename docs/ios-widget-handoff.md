@@ -1,15 +1,24 @@
 # iOS widget: where things stand
 
-Updated 2026-07-24. Supersedes the earlier handoff note that described the
-abandoned home-screen widget attempt mid-cleanup.
+Historical note. Updated 2026-08-25.
+
+Both widgets now ship. **The live document for the home screen widget is
+`docs/home-screen-widgets.md`**; this file is kept for the Xcode setup notes and
+the toolchain gotcha further down, which still apply.
 
 ## Summary
 
-The original attempt built a WidgetKit **home-screen widget** when what was
-wanted was a **Live Activity** (ActivityKit). The home-screen widget work is
-now parked, complete and self-contained, on branch **`feat/homescreen-widget`**
-(commit `8a85f14`). Merge that branch back if the home-screen widget is ever
-resumed; nothing of it remains on `main`.
+The first attempt built a WidgetKit **home-screen widget** when what was wanted
+was a **Live Activity** (ActivityKit), and it showed the workout in progress:
+current exercise, set number, rest timer. That made it blank whenever a session
+was not running, which is most of the time. It was parked on branch
+`feat/homescreen-widget` (commit `8a85f14`) and never merged.
+
+The home screen widget was rebuilt from scratch in 2026-08 as a program-level
+widget instead: next workout, this week, goal progress. It shares the extension
+target and the App Group described below, and reuses the `tracket://` URL scheme
+the Live Activity registered, but none of the parked branch's code. That branch
+can be deleted.
 
 ## What main keeps (shared scaffolding, all committed)
 
@@ -24,9 +33,8 @@ Xcode setup carries over:
   future widget or shared-defaults use.
 - `ios/WorkoutWidget/` is a `PBXFileSystemSynchronizedRootGroup`: any Swift
   file dropped in that folder joins the target automatically, no pbxproj edits.
-- `ios/WorkoutWidget/WorkoutWidgetBundle.swift` currently ships an inert
-  `PlaceholderWidget` so the target compiles. It gets replaced by the Live
-  Activity's `ActivityConfiguration`.
+- `ios/WorkoutWidget/WorkoutWidgetBundle.swift` now ships both widgets:
+  `ProgramWidget` (home screen) and `WorkoutLiveActivity`.
 - Bundle IDs are back on production values: `com.cole.tracket` and
   `com.cole.tracket.WorkoutWidget`.
 
@@ -37,25 +45,37 @@ Xcode setup carries over:
 - `lib/notifications/workout_widget_service.dart` and its 4 call sites in
   `active_workout_provider.dart` (the file is back at its pre-widget state;
   those 4 state-change moments are the map for Live Activity updates).
-- The `home_widget` dependency and its pod.
+- The `home_widget` dependency and its pod. It stayed out: the rebuilt widget
+  uses a hand-written MethodChannel instead, so there is no pod to install.
 
-## Toolchain gotcha (fixed, do not regress)
+## Toolchain gotcha (do not regress)
 
 Creating the extension target rewrote `project.pbxproj` with
 `objectVersion = 70` (Xcode 16.0 format). The installed CocoaPods stack
-(cocoapods 1.16.2 / xcodeproj 1.27.0 on system Ruby) does not know `70`, only
-`63` and `77`, so every `pod install` (and therefore every `flutter run`)
-died with:
+(cocoapods 1.16.2 / xcodeproj 1.27.0 on system Ruby) does not know `70`, so
+every `pod install` (and therefore every `flutter run`) died with:
 
     Unable to find compatibility version string for object version `70`.
 
-Fix applied: `objectVersion` is now `77` (Xcode 16.3+ format), which the gem
-and Xcode 26 both understand. If Xcode ever rewrites it back to 70, bump it
-to 77 again.
+The file currently sits at `objectVersion = 54`, which the gem understands and
+`pod install` is happy with. The rule is only that it must not go back to `70`:
+if Xcode ever rewrites it, set it to a version the gem knows (`54`, `63` or
+`77`).
 
-## Live Activity: not started
+Adding a Swift file under `ios/Runner/` means hand-editing this file, since the
+Runner group is a plain `PBXGroup`. Four entries are needed: a `PBXBuildFile`, a
+`PBXFileReference`, an entry in the group's `children`, and one in the target's
+`PBXSourcesBuildPhase`. Copy the shape of the `LiveActivityBridge.swift` lines,
+then check the result parses with
 
-Design and open questions live in `docs/live-activity-design.md`. Nothing of
-the Live Activity is implemented yet: no `NSSupportsLiveActivities` in
-`ios/Runner/Info.plist`, no `ActivityAttributes`, no `ActivityConfiguration`,
-no Dart bridge.
+    ruby -rxcodeproj -e 'Xcodeproj::Project.open("ios/Runner.xcodeproj")'
+
+Files under `ios/WorkoutWidget/` need none of this.
+
+## Live Activity
+
+Implemented. Design notes in `docs/live-activity-design.md`; the code is
+`ios/WorkoutWidget/WorkoutLiveActivity.swift`,
+`ios/Runner/LiveActivityBridge.swift`,
+`ios/Shared/WorkoutActivityAttributes.swift` and
+`lib/live_activity/workout_live_activity.dart`.
