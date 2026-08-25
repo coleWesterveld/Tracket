@@ -926,7 +926,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildPersistentSearchBar(BuildContext context) {
     final uiState = context.read<UiStateProvider>();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8),
+      // Match the analytics content's own EdgeInsets.all(8): 8 above the bar,
+      // and the content's top padding supplies the matching 8 below it.
+      padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0),
       child: InkWell(
         onTap: () {
           setState(() {
@@ -938,7 +940,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12.0),
           decoration: BoxDecoration(
             color: widget.theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(10),
+            // 16 to match the cards below it.
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: Theme.of(context).colorScheme.outline,
               width: 0.5

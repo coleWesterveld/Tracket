@@ -581,9 +581,17 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
           // reused untouched across margin changes.
           selector: (_, awp) => awp.activeDay != null,
           builder: (context, hasActiveWorkout, child) {
+            // Only reserve room for the control bar when it is actually on
+            // screen. The full-screen searches and the chart view suppress the
+            // bottom sheet, so keeping the margin left a grey gap at the bottom
+            // of the page (and above the keyboard while searching).
+            final bool showsControlBar = hasActiveWorkout
+                && uiState.currentPageIndex != 2
+                && !_bottomSheetSuppressed(uiState);
+
             return Container(
               margin: EdgeInsets.only(
-                bottom: (uiState.currentPageIndex != 2 && hasActiveWorkout) ? 80 : 0
+                bottom: showsControlBar ? 80 : 0
               ),
               child: child,
             );
@@ -773,6 +781,12 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
     );
   }
 
+  /// Full-screen overlays (exercise search, goal search, the chart view) own
+  /// the whole page, so no bottom sheet is drawn over them. Kept in one place
+  /// so the body's bottom margin stays in step with what is actually shown.
+  bool _bottomSheetSuppressed(UiStateProvider uiState) =>
+      uiState.isChoosingExercise || uiState.isDisplayingChart || uiState.isAddingGoal;
+
   Widget? _buildBottomSheet(){
     final uiState = context.watch<UiStateProvider>();
     ThemeData theme = Theme.of(context);
@@ -782,7 +796,7 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
     // then, if active workout then we display workoutstopwatch
     // otherwise display nothing 
 
-    if (uiState.isChoosingExercise || uiState.isDisplayingChart) return null;
+    if (_bottomSheetSuppressed(uiState)) return null;
 
     return Selector<ActiveWorkoutProvider, bool>(
       // Only depends on whether a workout is active, not the 1 Hz tick (RC#2).
