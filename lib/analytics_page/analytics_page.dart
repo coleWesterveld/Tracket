@@ -59,6 +59,7 @@ import '../widgets/info_popup.dart';
 import 'package:firstapp/widgets/exercise_history_list.dart';
 import 'package:firstapp/widgets/goal_progress.dart';
 import 'package:firstapp/other_utilities/timespan.dart';
+import 'package:firstapp/providers_and_settings/active_workout_provider.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
@@ -85,6 +86,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   String? tempGoalTitle;
   bool _isLoadingGoals = true;
 
+  // What the last dependency change saw, so the goals are only refetched when
+  // something that actually affects them moved.
+  int? _lastPageIndex;
+  bool? _lastUseMetric;
+
+  // Watched through a plain listener rather than context.watch: the provider
+  // ticks once a second while a workout runs, and this page has no reason to
+  // rebuild for that.
+  ActiveWorkoutProvider? _activeWorkoutRef;
+  bool _wasWorkoutActive = false;
+
   Timespan _selectedTimespan = Timespan.sixMonths; // Default timespan
 
 
@@ -102,17 +114,41 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   void initState() {
     scrollControl.addListener(_scrollListener);
     super.initState();
-    _fetchGoals();
-    
+    // The first fetch is kicked off by didChangeDependencies, which always runs
+    // before the first build and knows which weight unit to use.
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
-    // Refresh goals when page becomes visible to show updated progress
-    _fetchGoals(useMetric: context.read<SettingsModel>().useMetric);
-    
+
+    // This page sits in the root IndexedStack and is never disposed, so this
+    // runs on every notification from every provider it watches. Refetching
+    // unconditionally meant a goals query (one round trip per goal) for every
+    // nav tap, appbar change and profile edit. Refresh only when analytics
+    // actually comes into view, since progress may have changed while it was
+    // hidden, or when the weight unit changes.
+    final int pageIndex = context.watch<UiStateProvider>().currentPageIndex;
+    final bool useMetric = context.watch<SettingsModel>().useMetric;
+    final bool becameVisible = pageIndex == UiStateProvider.analyticsPageIndex
+        && _lastPageIndex != UiStateProvider.analyticsPageIndex;
+
+    if (becameVisible || useMetric != _lastUseMetric) {
+      _lastUseMetric = useMetric;
+      _fetchGoals(useMetric: useMetric);
+    }
+    _lastPageIndex = pageIndex;
+
+    // Finishing a workout can move a goal, and it can happen while analytics is
+    // already the open tab, so there is no becoming visible to catch it.
+    final activeWorkout = context.read<ActiveWorkoutProvider>();
+    if (!identical(_activeWorkoutRef, activeWorkout)) {
+      _activeWorkoutRef?.removeListener(_onActiveWorkoutChanged);
+      _activeWorkoutRef = activeWorkout;
+      _wasWorkoutActive = activeWorkout.activeDay != null;
+      _activeWorkoutRef!.addListener(_onActiveWorkoutChanged);
+    }
+
     // Check if there's a pending exercise to display from workout page
     final uiState = context.read<UiStateProvider>();
     if (uiState.pendingExerciseForChart != null) {
@@ -150,8 +186,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
+  void _onActiveWorkoutChanged() {
+    final bool isActive = _activeWorkoutRef?.activeDay != null;
+    if (_wasWorkoutActive && !isActive) {
+      _fetchGoals(useMetric: _lastUseMetric ?? false);
+    }
+    _wasWorkoutActive = isActive;
+  }
+
   @override
   void dispose(){
+    _activeWorkoutRef?.removeListener(_onActiveWorkoutChanged);
     scrollControl.removeListener(_scrollListener);
     scrollControl.dispose();
     super.dispose();
@@ -264,10 +309,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     setState(() => _isLoadingGoals = true);
 
     final dbHelper = DatabaseHelper.instance;
-    _goals = await dbHelper.fetchGoalsWithProgress(useMetric: useMetric);
+    final goals = await dbHelper.fetchGoalsWithProgress(useMetric: useMetric);
+    if (!mounted) return;
 
-    setState(() => _isLoadingGoals = false);
-    
+    setState(() {
+      _goals = goals;
+      _isLoadingGoals = false;
+    });
   }
 
   @override
