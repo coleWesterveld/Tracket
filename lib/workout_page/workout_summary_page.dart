@@ -60,6 +60,14 @@ class WorkoutSummaryPage extends StatelessWidget {
                     ],
                     const SizedBox(height: 20),
                     _CountsLine(summary: summary, theme: theme),
+                    // Sits with the counts because that is what it qualifies:
+                    // "3 exercises" reads differently once you know two were
+                    // set aside on purpose. Named, not counted, because the
+                    // names are the part still worth something a week later.
+                    if (summary.skipped.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _SkippedLine(names: summary.skipped, theme: theme),
+                    ],
                     const SizedBox(height: 8),
                     DisplayWorkout(
                       exerciseHistory: summary.sets,
@@ -144,6 +152,42 @@ class _Header extends StatelessWidget {
           style: TextStyle(fontSize: 15, color: theme.colorScheme.onSurface),
         ),
       ],
+    );
+  }
+}
+
+/// What the user swiped away during the session.
+///
+/// Deliberately quiet: skipping is a decision, not a failure, so this is one
+/// muted line under the counts rather than anything the eye lands on first.
+class _SkippedLine extends StatelessWidget {
+  final List<String> names;
+  final ThemeData theme;
+
+  const _SkippedLine({required this.names, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color muted = theme.colorScheme.onSurface.withAlpha(150);
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(Icons.skip_next, size: 14, color: muted),
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              "Skipped: ${names.join(', ')}",
+              style: TextStyle(fontSize: 13, color: muted),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -60,7 +60,7 @@ class ProgramPageState extends State<ProgramPage> {
   TextEditingController alertTEC = TextEditingController();
   
   // Add exercise to a day
-  void _handleExerciseSelected(BuildContext context, Map<String, dynamic> exercise, int index, int exerciseIndex) async {
+  Future<void> _handleExerciseSelected(BuildContext context, Map<String, dynamic> exercise, int index, int exerciseIndex) async {
     setState(() {
       _exerciseID = exercise['exercise_id'];
     });
@@ -104,14 +104,13 @@ class ProgramPageState extends State<ProgramPage> {
         WidgetsBinding.instance.focusManager.primaryFocus?.unfocus();
       },
 
-      child: uiState.isChoosingExercise ? ExerciseSearchWidget(
+      child: uiState.isSearchingExerciseFor(ExerciseSearchOwner.program) ? ExerciseSearchWidget(
         theme: theme,
-        onExerciseSelected: (exercise) {
-          _handleExerciseSelected(context, exercise, _activeIndex!, _exerciseIndex!);
-        },
-        onSearchModeChanged: (isSearching) {
+        onExerciseSelected: (exercise) =>
+            _handleExerciseSelected(context, exercise, _activeIndex!, _exerciseIndex!),
+        onDismiss: () {
           setState(() {
-            uiState.isChoosingExercise = isSearching;          
+            uiState.exerciseSearchOwner = ExerciseSearchOwner.none;
           });
         },
       ): Column(
@@ -126,7 +125,7 @@ class ProgramPageState extends State<ProgramPage> {
                     setState(() {
                       _activeIndex = index;
                       _exerciseIndex = exerciseIndex;
-                      uiState.isChoosingExercise = true;
+                      uiState.exerciseSearchOwner = ExerciseSearchOwner.program;
                     });
                   },
                 

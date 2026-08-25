@@ -97,6 +97,12 @@ class WorkoutSummary {
   /// Weight unit label the numbers are in.
   final String unit;
 
+  /// Exercises set aside with a swipe during the session, in day order.
+  ///
+  /// Worth saying out loud a week later: "I did four of six" reads very
+  /// differently from "I did four".
+  final List<String> skipped;
+
   const WorkoutSummary({
     required this.dayTitle,
     required this.date,
@@ -109,6 +115,7 @@ class WorkoutSummary {
     required this.comparisons,
     required this.titles,
     required this.unit,
+    this.skipped = const <String>[],
   });
 }
 
@@ -351,6 +358,14 @@ Future<WorkoutSummary?> buildWorkoutSummary({
     );
   }
 
+  // ── Skipped ───────────────────────────────────────────────────────────
+  // Read off the session flags, not the log: a skipped exercise never wrote
+  // anything, which is exactly why it would otherwise vanish without trace.
+  final List<String> skipped = [];
+  for (int e = 0; e < exercises.length; e++) {
+    if (workout.isSkipped(e)) skipped.add(exercises[e].exerciseTitle);
+  }
+
   return WorkoutSummary(
     dayTitle: profile.split.length > dayIndex
         ? profile.split[dayIndex].dayTitle
@@ -369,6 +384,7 @@ Future<WorkoutSummary?> buildWorkoutSummary({
           e.exerciseID: e.exerciseTitle,
     },
     unit: unit,
+    skipped: skipped,
   );
 }
 

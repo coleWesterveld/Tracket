@@ -6,20 +6,31 @@ import 'app_message.dart';
 // TODO: the add custom exercise should maybe pop conditionally, default to true
 // the current functionality in the analytics page is stupid
 // also, try adding a new exercise in analytics -- it says no history for ""this execise" which I think is just my default value
-// I think this is an async await DB read/write logic error, so think of a good way to set everything up for good UX and then implement 
+// I think this is an async await DB read/write logic error, so think of a good way to set everything up for good UX and then implement
 class ExerciseSearchWidget extends StatefulWidget {
   const ExerciseSearchWidget({
     super.key,
     this.onExerciseSelected,
-    this.onSearchModeChanged,
+    this.onDismiss,
     required this.theme,
   });
 
   /// Called when an exercise is selected.
-  final void Function(Map<String, dynamic> exercise)? onExerciseSelected;
+  ///
+  /// Awaited before the search closes, so a caller that writes to the database
+  /// finishes while its own screen is still up. Throwing is fine: the search
+  /// closes either way, and the caller owns telling the user it failed.
+  final Future<void> Function(Map<String, dynamic> exercise)? onExerciseSelected;
 
-  /// Called when the search mode changes. True means active search mode.
-  final void Function(bool isSearching)? onSearchModeChanged;
+  /// Called when the user leaves the search, either by backing out or once a
+  /// selection has been fully handled.
+  ///
+  /// This is the ONLY thing that closes the search. It is deliberately not
+  /// wired to the search field's focus: focus comes and goes for reasons that
+  /// have nothing to do with wanting to leave (the return key, the keyboard
+  /// being put away, a field on another screen taking focus), and closing the
+  /// page on any of those tore the results list down mid-tap.
+  final VoidCallback? onDismiss;
 
   final ThemeData theme;
 
@@ -36,6 +47,11 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
   List<Map<String, dynamic>> _exercises = [];
   bool _showCustomMaker = false;
 
+  /// True from the moment a row is tapped until the caller is done with it.
+  /// Stops a second tap landing while the first is still being written, which
+  /// is how the same exercise ended up added twice.
+  bool _selecting = false;
+
   @override
   void initState() {
     super.initState();
@@ -43,25 +59,41 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
 
     // Automatically focus the search field when the widget appears.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _searchFocus.requestFocus();
+      if (mounted) _searchFocus.requestFocus();
     });
-    _searchFocus.addListener(() {
-      widget.onSearchModeChanged?.call(_searchFocus.hasFocus);
-    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _loadExercisesFromDatabase() async {
-    _exercises = await dbHelper.fetchExercisesWithIds();
-    setState(() {});
+    final exercises = await dbHelper.fetchExercisesWithIds();
+    if (!mounted) return;
+    setState(() => _exercises = exercises);
   }
 
-  void _clearSearch() {
-    setState(() {
-      _searchQuery = "";
-      _searchController.clear();
-      _searchFocus.unfocus();
-    });
-    widget.onSearchModeChanged?.call(false);
+  /// Hands [exercise] to the caller, waits for it to be dealt with, then leaves.
+  Future<void> _select(Map<String, dynamic> exercise) async {
+    if (_selecting) return;
+    setState(() => _selecting = true);
+
+    try {
+      await widget.onExerciseSelected?.call(exercise);
+    } finally {
+      if (mounted) {
+        _searchFocus.unfocus();
+        widget.onDismiss?.call();
+      }
+    }
+  }
+
+  void _dismiss() {
+    _searchFocus.unfocus();
+    widget.onDismiss?.call();
   }
 
   Future<void> _deleteExercise(int exerciseId) async {
@@ -129,17 +161,17 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
       height: MediaQuery.of(context).size.height-MediaQuery.of(context).viewInsets.bottom,
       exit: ()=> setState(() {
         _showCustomMaker=false;
-        
+
       }),
-      onDone: (exercise) {
-        widget.onExerciseSelected?.call(exercise);
-        _clearSearch();
-      },
+      onDone: (exercise) => _select(exercise),
 
       theme: widget.theme,
-    ): 
+    ):
     GestureDetector(
-      onTap: _clearSearch,
+      // Tapping the backdrop puts the keyboard away, the same gesture every
+      // other page in the app uses. Leaving is the back arrow's job: closing
+      // the whole search on a stray tap reads as "it lost my selection".
+      onTap: () => _searchFocus.unfocus(),
       child: Material(
         child: Container(
           color: Colors.black.withOpacity(0.8),
@@ -152,7 +184,7 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: _clearSearch,
+                      onPressed: _dismiss,
                     ),
                     Expanded(
                       child: TextField(
@@ -177,7 +209,7 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
                         ),
                         style: const TextStyle(color: Colors.white),
                       )
-        
+
                     ),
                   ],
                 ),
@@ -194,16 +226,13 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
                         style: const TextStyle(color: Colors.white),
                       ),
                       onTap: () {
-                        _searchController.text = exercise['exercise_title'];
                         final modifiedExercise = Map<String, dynamic>.from(exercise);
-          
+
                         // Rename 'id' to 'exercise_id'
                         // this is remnant of old bad naming convention that should prolly be solved at the root at some point
                         modifiedExercise['exercise_id'] = modifiedExercise.remove('id');
-                        
-                        // Call the callback with the modified exercise
-                        widget.onExerciseSelected?.call(modifiedExercise);
-                        _clearSearch();
+
+                        _select(modifiedExercise);
                       },
 
                       onLongPress: () {
@@ -259,7 +288,10 @@ class _ExerciseSearchWidgetState extends State<ExerciseSearchWidget> {
             .contains(_searchQuery.toLowerCase()))
         .toList();
 
-    return _buildFullScreenSearch(filteredExercises);
+    // While a selection is being written the list must not take another tap.
+    return AbsorbPointer(
+      absorbing: _selecting,
+      child: _buildFullScreenSearch(filteredExercises),
+    );
   }
 }
-

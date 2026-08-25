@@ -65,6 +65,7 @@ WorkoutSummary summaryWith({
   List<SetRecord>? sets,
   int exerciseCount = 3,
   int setCount = 8,
+  List<String> skipped = const [],
 }) {
   final List<SetRecord> records = sets ??
       [
@@ -85,6 +86,7 @@ WorkoutSummary summaryWith({
     comparisons: comparisons,
     titles: const {1: 'Bench Press', 2: 'Overhead Press', 3: 'Tricep Pushdown'},
     unit: 'lb',
+    skipped: skipped,
   );
 }
 
@@ -341,6 +343,28 @@ void main() {
       expect(find.text('24 sets'), findsOneWidget);
       // The button lives outside the scrolling list, so it is always there.
       expect(find.text('Done'), findsOneWidget);
+    });
+
+    testWidgets('a session with nothing skipped says nothing about skipping',
+        (tester) async {
+      await showSummary(tester, summaryWith());
+
+      expect(find.textContaining('Skipped'), findsNothing);
+      expect(find.byIcon(Icons.skip_next), findsNothing);
+    });
+
+    testWidgets('skipped exercises are named, next to the counts',
+        (tester) async {
+      await showSummary(
+        tester,
+        summaryWith(skipped: const ['Face Pull', 'Hammer Curl']),
+      );
+
+      // Named rather than counted: "2 skipped" is worth nothing a week later.
+      expect(find.text('Skipped: Face Pull, Hammer Curl'), findsOneWidget);
+      expect(find.byIcon(Icons.skip_next), findsOneWidget);
+      // It qualifies the counts, so it must not have pushed them off screen.
+      expect(find.text('3 exercises'), findsOneWidget);
     });
   });
 }

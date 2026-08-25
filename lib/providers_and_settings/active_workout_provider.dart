@@ -57,6 +57,14 @@ class ActiveWorkoutProvider extends ChangeNotifier {
   List<int> nextSet = [0, 0, 0];
   List<bool> isExerciseComplete = [];
 
+  /// Exercises the user swiped away for THIS session only.
+  ///
+  /// Purely ephemeral: nothing is logged, the program is untouched, and the
+  /// flags die with the workout. A skipped exercise counts as done for
+  /// "what's next" and for the Finish button, so the session can end without
+  /// it, but it never produces a set record.
+  List<bool> isExerciseSkipped = [];
+
   DateTime? workoutStartTime;
   DateTime? lastRestStartTime;
   Timer? timer;
@@ -247,6 +255,7 @@ class ActiveWorkoutProvider extends ChangeNotifier {
       exerciseExpansionStates: expansionStates,
       loggedRecordIDs: currentLoggedRecordIDs,
       setPRs: setPRs.map((key, kind) => MapEntry(key, kind.name)),
+      skippedExercises: List<bool>.from(isExerciseSkipped),
     );
 
     ////debugPrint("2 hey this should run for sure");
@@ -469,6 +478,22 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     
     activeDay = programProvider.split[activeDayIndex!]; // Ensure activeDay is also set
     showHistory = List.filled(programProvider.exercises[activeDayIndex!].length, false, growable: true); // Re-init showHistory if needed
+
+    // 6. Restore skipped exercises. Sized to the day rather than trusted from
+    // the snapshot, so a program edited between backgrounding and resuming
+    // cannot leave the flags misaligned with the exercise list.
+    isExerciseSkipped = List.filled(
+      programProvider.exercises[activeDayIndex!].length,
+      false,
+      growable: true,
+    );
+    final List<bool>? savedSkips = snapshot.skippedExercises;
+    if (savedSkips != null) {
+      for (int i = 0; i < savedSkips.length && i < isExerciseSkipped.length; i++) {
+        isExerciseSkipped[i] = savedSkips[i];
+      }
+    }
+
     _calculateExerciseCompletion();
     // Re-attach to (or re-create) the Lock Screen card for the restored workout.
     _syncLiveActivity(starting: true);
@@ -486,8 +511,15 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     } else{
       // for each exercise
       for (int exerciseIndex = 0; exerciseIndex < programProvider.exercises[activeDayIndex!].length; exerciseIndex++){
+        // A skipped exercise is settled for this session: it is done being
+        // asked about, even though nothing was logged for it.
+        if (exerciseIndex < isExerciseSkipped.length && isExerciseSkipped[exerciseIndex]) {
+          isExerciseComplete[exerciseIndex] = true;
+          continue;
+        }
+
         bool complete = true;
-        
+
         // for each set cluster in each exercise
         setLoop:
         for (int setIndex = 0; setIndex < programProvider.sets[activeDayIndex!][exerciseIndex].length; setIndex++){
@@ -553,10 +585,11 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     }
 
     // "Next: X" appears only on the exercise's last set, when it is
-    // actually actionable.
+    // actually actionable. Skipped exercises are not what comes next.
     String? nextExercise;
-    if (position == setCount && exIdx + 1 < exercises.length) {
-      nextExercise = exercises[exIdx + 1].exerciseTitle;
+    if (position == setCount) {
+      final int? nextIdx = _nextUnskippedExerciseAfter(exIdx);
+      if (nextIdx != null) nextExercise = exercises[nextIdx].exerciseTitle;
     }
 
     // The card shows a single line, and ActivityKit caps the whole payload
@@ -578,14 +611,40 @@ class ActiveWorkoutProvider extends ChangeNotifier {
     };
   }
 
+  /// The payload last handed to ActivityKit, so identical ones can be dropped.
+  ///
+  /// Sync is called from every path that can change what the card says, and
+  /// several of those fire on notifications that did not change it (the 1 Hz
+  /// tick's neighbours, a Profile write elsewhere in the app). ActivityKit
+  /// updates are rate limited and cost battery, so an unchanged payload must
+  /// not reach the channel.
+  String? _lastLiveActivitySignature;
+
   /// Pushes the current state to the Live Activity. [starting] requests a new
   /// activity (workout start, snapshot restore); otherwise it updates the one
   /// on screen. A null payload ends whatever is showing.
   void _syncLiveActivity({bool starting = false}) {
     final payload = _liveActivityPayload();
+
     if (payload == null) {
+      if (_lastLiveActivitySignature == null && !starting) return;
+      _lastLiveActivitySignature = null;
       WorkoutLiveActivity.end();
-    } else if (starting) {
+      return;
+    }
+
+    // Nothing is on screen (never started, or ended when the day briefly had
+    // no exercises), so this has to create one rather than update a dead
+    // activity.
+    final bool mustStart = starting || _lastLiveActivitySignature == null;
+
+    final String signature = jsonEncode(payload);
+    // A start always goes through: it is what creates (or re-attaches to) the
+    // activity, so a matching payload must not suppress it.
+    if (!mustStart && signature == _lastLiveActivitySignature) return;
+    _lastLiveActivitySignature = signature;
+
+    if (mustStart) {
       WorkoutLiveActivity.start(payload);
     } else {
       WorkoutLiveActivity.update(payload);
@@ -639,6 +698,11 @@ void _initializeStructuresForDay(int dayIdx) {
   showHistory = List.filled(programProvider.exercises[dayIdx].length, false, growable: true);
   
   isExerciseComplete = List.filled(
+    programProvider.exercises[dayIdx].length,
+    false,
+    growable: true,
+  );
+  isExerciseSkipped = List.filled(
     programProvider.exercises[dayIdx].length,
     false,
     growable: true,
@@ -798,6 +862,7 @@ void _initializeStructuresForDay(int dayIdx) {
     ensureLength(workoutExpansionControllers, numExercises, () => ExpansibleController());
     ensureLength(expansionStates, numExercises, () => false);
     ensureLength(isExerciseComplete, numExercises, () => false);
+    ensureLength(isExerciseSkipped, numExercises, () => false);
     if (showHistory != null) ensureLength(showHistory!, numExercises, () => false);
     //_ensureLength(workoutNotesTEC, numExercises, () => TextEditingController());
 
@@ -889,6 +954,7 @@ void _initializeStructuresForDay(int dayIdx) {
       // read this before the teardown runs.
       setPRs.clear();
       await clearActiveWorkoutState(); // Clear snapshot when workout is explicitly ended/cleared
+      _lastLiveActivitySignature = null;
       WorkoutLiveActivity.end();
 
       // Delete the temporary day from DB and memory after all state is cleared
@@ -943,10 +1009,12 @@ void _initializeStructuresForDay(int dayIdx) {
     nextSet = [0, 0, 0];
     shakeFinish = false;
     isExerciseComplete = [];
+    isExerciseSkipped = [];
     workoutStartTime = null;
     lastRestStartTime = null;
     setPRs.clear(); // the sets those PRs came from were just deleted
     await clearActiveWorkoutState();
+    _lastLiveActivitySignature = null;
     WorkoutLiveActivity.end();
 
     // Drop the one-off day too, if this was a free workout.
@@ -1000,6 +1068,10 @@ void _initializeStructuresForDay(int dayIdx) {
     final currentSetIndex = justDone[1];
     final currentSubsetIndex = justDone[2];
     final currentSet = programProvider.sets[activeDayIndex!][currentExerciseIndex][currentSetIndex];
+
+    // Where the workout goes once this exercise runs out, stepping over
+    // anything skipped. Null means the rest of the day is done or set aside.
+    final int? nextExerciseIndex = _nextUnskippedExerciseAfter(currentExerciseIndex);
 
     // Check if there are more subsets in current set
     if (currentSubsetIndex < currentSet.numSets - 1) {
@@ -1076,9 +1148,10 @@ void _initializeStructuresForDay(int dayIdx) {
       }
     }
     // Check if there are more exercises in workout
-    else if (currentExerciseIndex < programProvider.exercises[activeDayIndex!].length - 1) {
-      // Move to first subset of first set in next exercise
-      nextSet = [currentExerciseIndex + 1, 0, 0];
+    else if (nextExerciseIndex != null) {
+      // Move to first subset of first set in the next exercise the user has
+      // not skipped. Skipped ones are stepped straight over.
+      nextSet = [nextExerciseIndex, 0, 0];
     }
     // Else we're at the end of the (positional) list
     else {
@@ -1106,8 +1179,97 @@ void _initializeStructuresForDay(int dayIdx) {
   void recalculateCompletion() {
     _calculateExerciseCompletion();
     shakeFinish = isExerciseComplete.isNotEmpty && isExerciseComplete.every((c) => c);
-    // Covers unlogging a set, which never goes through incrementSet.
+    // Covers unlogging a set, which never goes through incrementSet, and every
+    // structural edit (set added, exercise added) that changes what the card says.
     _syncLiveActivity();
     notifyListeners();
   }
+
+  /// True when [exerciseIndex] is skipped for this session.
+  bool isSkipped(int exerciseIndex) =>
+      exerciseIndex >= 0 &&
+      exerciseIndex < isExerciseSkipped.length &&
+      isExerciseSkipped[exerciseIndex];
+
+  /// The first exercise after [from] the user has not skipped, or null when the
+  /// rest of the day is skipped.
+  int? _nextUnskippedExerciseAfter(int from) {
+    if (activeDayIndex == null ||
+        activeDayIndex! >= programProvider.exercises.length) {
+      return null;
+    }
+    final int count = programProvider.exercises[activeDayIndex!].length;
+    for (int i = from + 1; i < count; i++) {
+      if (!isSkipped(i)) return i;
+    }
+    return null;
+  }
+
+  /// The first exercise that is neither skipped nor fully logged, searching
+  /// forward from [from] and then wrapping to the start.
+  ///
+  /// Used to re-point "what's next" after a skip: forward first, because the
+  /// natural read of skipping is "move on", and only then back to anything
+  /// still outstanding above.
+  int? _firstOutstandingExercise(int from) {
+    if (activeDayIndex == null ||
+        activeDayIndex! >= programProvider.exercises.length) {
+      return null;
+    }
+    final int count = programProvider.exercises[activeDayIndex!].length;
+    for (int step = 0; step < count; step++) {
+      final int i = (from + step) % count;
+      if (!isSkipped(i) && i < isExerciseComplete.length && !isExerciseComplete[i]) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  /// Skips or un-skips [exerciseIndex] for this session only.
+  ///
+  /// Nothing is written to the program or the log: this exists purely so the
+  /// workout can move past an exercise the user is not doing today.
+  void toggleSkip(int exerciseIndex) {
+    if (activeDayIndex == null) return;
+    ensureLength(
+      isExerciseSkipped,
+      programProvider.exercises[activeDayIndex!].length,
+      () => false,
+    );
+    if (exerciseIndex < 0 || exerciseIndex >= isExerciseSkipped.length) return;
+
+    isExerciseSkipped[exerciseIndex] = !isExerciseSkipped[exerciseIndex];
+
+    // Collapse a skipped tile: its fields are no longer something to fill in.
+    if (isExerciseSkipped[exerciseIndex] &&
+        exerciseIndex < workoutExpansionControllers.length &&
+        exerciseIndex < expansionStates.length) {
+      expansionStates[exerciseIndex] = false;
+      try {
+        workoutExpansionControllers[exerciseIndex].collapse();
+      } catch (_) {
+        // Controller not attached (tile off screen) — the state flag is enough.
+      }
+    }
+
+    _calculateExerciseCompletion();
+    shakeFinish = isExerciseComplete.isNotEmpty && isExerciseComplete.every((c) => c);
+
+    // Never leave "what's next" pointing at something the user just skipped.
+    if (isSkipped(nextSet[0])) {
+      final int? moveTo = _firstOutstandingExercise(nextSet[0]);
+      if (moveTo != null) nextSet = [moveTo, 0, 0];
+    }
+
+    _syncLiveActivity();
+    notifyListeners();
+  }
+
+  /// Re-pushes the Live Activity after the program data underneath the workout
+  /// changed (a set or exercise added, a target edited, a day renamed).
+  ///
+  /// Cheap to call often: [_syncLiveActivity] drops the platform call when the
+  /// payload is identical to the one already on screen.
+  void syncLiveActivity() => _syncLiveActivity();
 }
