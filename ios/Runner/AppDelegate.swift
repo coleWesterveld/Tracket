@@ -8,6 +8,7 @@ import flutter_local_notifications
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let liveActivityBridge = LiveActivityBridge()
+  private let homeWidgetBridge = HomeWidgetBridge()
 
   override func application(
     _ application: UIApplication,
@@ -25,15 +26,19 @@ import flutter_local_notifications
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  // The Live Activity's Finish pill opens tracket://finish. The bridge only
-  // records it; the Dart side drains the flag on its next resume and runs the
-  // real finish flow, so the summary screen still gets shown.
+  // Both deep links are recorded rather than acted on: the Dart side drains the
+  // flag on its next resume, which is the only way a URL that lands during a
+  // cold launch can still be honoured.
+  //
+  //   tracket://finish            the Live Activity's Finish pill
+  //   tracket://open?tab=schedule a home screen widget
   override func application(
     _ app: UIApplication,
     open url: URL,
     options: [UIApplication.OpenURLOptionsKey: Any] = [:]
   ) -> Bool {
     if liveActivityBridge.handle(url: url) { return true }
+    if homeWidgetBridge.handle(url: url) { return true }
     return super.application(app, open: url, options: options)
   }
 
@@ -41,6 +46,9 @@ import flutter_local_notifications
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "LiveActivityBridge") {
       liveActivityBridge.register(with: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "HomeWidgetBridge") {
+      homeWidgetBridge.register(with: registrar.messenger())
     }
   }
 }

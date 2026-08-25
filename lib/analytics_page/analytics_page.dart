@@ -62,6 +62,7 @@ import 'package:firstapp/other_utilities/timespan.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
 import 'package:firstapp/providers_and_settings/settings_provider.dart';
 import 'package:firstapp/other_utilities/unit_conversions.dart';
+import 'package:firstapp/home_widget/home_screen_widget.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({
@@ -363,7 +364,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       setState(() {
         _goals.add(savedGoal);
       });
+      _refreshGoalWidget();
     }
+  }
+
+  /// Pushes the goals onto the home screen widget. Goals live outside Profile, so
+  /// the program listener in main.dart never sees them change.
+  void _refreshGoalWidget() {
+    if (!mounted) return;
+    HomeScreenWidget.refreshNow(
+      profile: context.read<Profile>(),
+      settings: context.read<SettingsModel>(),
+    );
   }
 
   // calculates one rep max based off of top set from last session from the database
@@ -637,6 +649,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       await dbHelper.updateGoal(updatedGoal);
       if (mounted){
         await _fetchGoals(useMetric: context.read<SettingsModel>().useMetric);
+        _refreshGoalWidget();
       }
     }
   }
@@ -673,6 +686,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       setState(() {
         _goals.removeWhere((g) => g.id == goal.id);
       });
+      _refreshGoalWidget();
     }
   }
 

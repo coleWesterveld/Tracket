@@ -30,6 +30,7 @@ import 'package:firstapp/providers_and_settings/settings_page.dart';
 import 'package:firstapp/providers_and_settings/ui_state_provider.dart';
 import 'widgets/calendar_bottom_sheet.dart';
 import 'live_activity/workout_live_activity.dart';
+import 'home_widget/home_screen_widget.dart';
 import 'workout_page/finish_workout.dart';
 
 
@@ -331,6 +332,18 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+
+    // The home screen widget has nothing to do with whether a workout is
+    // running, so it sits outside the guard below. Backgrounding is the moment
+    // its snapshot is most likely to have gone stale, and a resume can be a
+    // widget tap that still needs answering.
+    if (state == AppLifecycleState.paused) {
+      _refreshHomeWidget();
+    } else if (state == AppLifecycleState.resumed) {
+      _refreshHomeWidget();
+      _drainPendingWidgetTab();
+    }
+
     // Ensure context is valid if this widget can be rebuilt, or use a stored context.
     // For Provider.of with listen:false, it's generally safe if providers are above this in the tree.
     final activeWorkoutP = Provider.of<ActiveWorkoutProvider>(context, listen: false);
@@ -380,8 +393,56 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
     }
   }
 
+  // ── Home screen widget ────────────────────────────────────────────────────
+  // The widget reads a snapshot the app writes into a shared App Group; it
+  // cannot query the database itself. See lib/home_widget/.
+
+  /// Held so the listener can be removed in dispose, where the context is no
+  /// longer safe to read providers from.
+  Profile? _widgetProfile;
+
+  /// Rebuilds the snapshot after a program or schedule edit. Profile notifies on
+  /// every mutation, including every frame of a reorder drag, so the service
+  /// debounces rather than this listener.
+  void _onProgramChangedForWidget() {
+    if (!mounted || _widgetProfile == null) return;
+    HomeScreenWidget.scheduleRefresh(
+      profile: _widgetProfile!,
+      settings: context.read<SettingsModel>(),
+    );
+  }
+
+  /// Pushes a fresh snapshot straight away. Waits for Profile first: on a cold
+  /// launch this can run before the split has come back from the database, and a
+  /// snapshot built from an empty program would blank the widget.
+  Future<void> _refreshHomeWidget() async {
+    if (!mounted) return;
+    final profile = context.read<Profile>();
+    final settings = context.read<SettingsModel>();
+
+    if (!profile.isInitialized) {
+      try {
+        await profile.initializationDone;
+      } catch (_) {
+        return;
+      }
+    }
+    if (!mounted) return;
+
+    await HomeScreenWidget.refreshNow(profile: profile, settings: settings);
+  }
+
+  /// Moves to the tab a widget tap asked for. The native side records the URL
+  /// rather than pushing it, so a tap during a cold launch is not lost.
+  Future<void> _drainPendingWidgetTab() async {
+    final WidgetTab? tab = await HomeScreenWidget.takePendingTab();
+    if (tab == null || !mounted) return;
+    context.read<UiStateProvider>().currentPageIndex = tab.pageIndex;
+  }
+
   @override
   void dispose() {
+    _widgetProfile?.removeListener(_onProgramChangedForWidget);
     WidgetsBinding.instance.removeObserver(this); // REMOVE OBSERVER
     super.dispose();
   }
@@ -422,6 +483,13 @@ class MainScaffoldState extends State<MainScaffold>  with WidgetsBindingObserver
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // This context is now guaranteed to be below MultiProvider from _MainPage
       if (mounted) {
+        // Keep the home screen widget in step with the program, and answer a tap
+        // that launched the app in the first place.
+        _widgetProfile = Provider.of<Profile>(context, listen: false)
+          ..addListener(_onProgramChangedForWidget);
+        _refreshHomeWidget();
+        _drainPendingWidgetTab();
+
         final settings = Provider.of<SettingsModel>(context, listen: false);
         // Inject keys into TutorialManager for current subtree
         final tutorialManager = Provider.of<TutorialManager>(context, listen: false);
